@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'nightpass/lmao.css' %}">
+{% endblock %}
+
+{% block content %}
+
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+
+<div class="main-layout">
+    <div class="profile-card">
+        <div class="profile-images">
+            <img class="profile-img" src="{{ student.picture }}" alt="Student Picture">
+            <svg id="barcode"></svg>
+        </div>
+        <div class="profile-details">
+            <p><strong>Name:</strong> {{ student.name }}</p>
+            <p><strong>Roll Number:</strong> {{ student.registration_number }}</p>
+            <p><strong>Hostel:</strong> {{ student.hostel.name }}</p>
+            
+            {% if user_pass %}
+                <hr style="margin: 10px 0; border: 0; border-top: 1px solid #eee;">
+                
+                <p class="unsafe"><strong>Status:</strong> {{ user_pass.status_message }}</p>
+                
+                {% if user_pass.current_step == 1 or user_pass.current_step == 3 %}
+                    <p class="unsafe"><strong>Time Remaining: </strong><span id="transit-timer">Waiting for scan...</span></p>
+                {% endif %}
+
+            {% elif student.is_checked_in %}
+                <p class="safe"><strong>Status:</strong> Inside Hostel {{ student.hostel.name }}</p>
+            {% else %}
+                <p class="unsafe"><strong>Status:</strong> Outside / No Active Pass</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="location-cards">
+    {% if campus_resources|length > 0 %}
+        {% for resource in campus_resources %}
+            <div class="resource-card">
+                <img class="resource-img" src="{{ resource.picture }}" alt="{{ resource.name }}">
+                <div class="resource-details">
+                    <h2>{{ resource.name }}</h2>
+                    <p>{{ resource.description }}</p>
+
+                    {% if resource == user_pass.campus_resource %}
+                        <button class="book-button gray"
+                                onclick="openModal('{{ resource.name }}',
+                                                   '{{ resource.description }}',
+                                                   '{{ resource.picture }}',
+                                                   false)">
+                            Cancel Slot
+                        </button>
+                    {% else %}
+                        {% if resource.is_booking %}
+                            <button class="book-button"
+                                    onclick="openModal('{{ resource.name }}',
+                                                       '{{ resource.description }}',
+                                                       '{{ resource.picture }}',
+                                                       true)">
+                                Book Slot
+                            </button>
+                        {% else %}
+                            <button class="book-button gray" disabled>
+                                Booking time 10am - 8pm
+                            </button>
+                        {% endif %}
+                    {% endif %}
+                </div>
+            </div>
+        {% endfor %}
+    {% endif %}
+    </div>
+</div>
+
+<div id="myModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <span class="close" onclick="closeModal()">&times;</span>
+        <div class="modal-image">
+            <img src="" id="modal-resource-picture" alt="Resource">
+        </div>
+        <div class="modal-details">
+            <h2 id="modal-resource-name"></h2>
+            <p id="modal-resource-description"></p>
+            <button class="modal-button" id="modal-resource-book">Confirm</button>
+        </div>
+    </div>
+</div>
+
+<script id="user-pass-data" type="application/json">
+{
+    "registration_number": "{{ student.registration_number|default:'' }}",
+    "current_step": {{ user_pass.current_step|default:-1 }},
+    "hostel_checkout_time": "{{ user_pass.hostel_checkout_time|date:'c'|default:'' }}",
+    "library_out_time": "{{ user_pass.library_out_time|date:'c'|default:'' }}"
+}
+</script>
+
+{% if user_incidents|length > 0 %}
+<div style="max-width:1200px; margin:40px auto; padding:0 20px;">
+    <div class="profile-card">
+        <div class="table-section">
+            <h2>Incident History</h2>
+            <table class="activity-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Location</th>
+                        <th>Remarks</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for incident in user_incidents %}
+                    <tr>
+                        <td>{{ incident.date }}</td>
+                        <td>{{ incident.campus_resource.name }}</td>
+                        <td>{{ incident.defaulter_remarks }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+/* MODAL LOGIC */
+function closeModal() {
+    document.getElementById("myModal").style.display = "none";
+}
+
+function openModal(name, description, picture, isBooking) {
+    var modal = document.getElementById("myModal");
+    if (!modal) return;
+    modal.style.display = "flex";
+
+    document.getElementById('modal-resource-name').innerText = name;
+    document.getElementById('modal-resource-description').innerText = description;
+    document.getElementById('modal-resource-picture').src = picture;
+
+    let btn = document.getElementById('modal-resource-book');
+    let url = isBooking ? "book/" + name : "cancel/";
+    let confirmMsg = isBooking ? "Do you want to book this slot?" : "Cancel your booking?";
+
+    btn.innerText = isBooking ? "Confirm Booking" : "Confirm Cancellation";
+    btn.onclick = function() {
+        if (confirm(confirmMsg)) {
+            $.ajax({
+                method: "POST",
+                url: url,
+                success: function (response) {
+                    let data = JSON.parse(response);
+                    if (data.status) {
+                        toastr.success(data.message);
+                        setTimeout(function(){ location.reload(); }, 1000);
+                    } else {
+                        toastr.error(data.message);
+                    }
+                }
+            });
+        }
+    };
+}
+
+/* --- AUTO-REFRESH POLLING --- */
+// Checks every 5 seconds if the status has changed in the backend
+function checkStatusUpdate() {
+    const dataElement = document.getElementById("user-pass-data");
+    const currentPassData = dataElement ? JSON.parse(dataElement.textContent) : null;
+    
+    // Replace URL with your actual endpoint that returns the current_step for the logged-in user
+    $.ajax({
+        url: "/access/get_status_json/", 
+        method: "GET",
+        success: function(response) {
+            // If the step in DB is different from what's currently rendered, refresh the page
+            if (response.current_step !== currentPassData.current_step) {
+                location.reload(); 
+            }
+        },
+        error: function() {
+            console.log("Status check failed. Ensure /access/get_status_json/ exists.");
+        }
+    });
+}
+// Start polling
+setInterval(checkStatusUpdate, 5000); 
+
+/* BARCODE & 40-MINUTE TIMERS */
+document.addEventListener("DOMContentLoaded", function () {
+    const dataElement = document.getElementById("user-pass-data");
+    const passData = dataElement ? JSON.parse(dataElement.textContent) : null;
+
+    // Render Barcode
+    if (passData && passData.registration_number) {
+        JsBarcode("#barcode", passData.registration_number, {
+            format: "CODE128",
+            width: 2,
+            height: 50,
+            displayValue: true
+        });
+    }
+
+    // Logic for 40-Minute Transit Timer
+    if (passData && (passData.current_step === 1 || passData.current_step === 3)) {
+        let transitStart = passData.current_step === 1 ? passData.hostel_checkout_time : passData.library_out_time;
+        if (transitStart) {
+            setInterval(function () {
+                let now = new Date().getTime();
+                let startTime = new Date(transitStart).getTime();
+                if (!isNaN(startTime)) {
+                    // UPDATED: 40 Minutes (40 * 60 * 1000 ms)
+                    let deadline = startTime + (40 * 60 * 1000); 
+                    let remaining = deadline - now;
+                    
+                    let transitElement = document.getElementById("transit-timer");
+                    if (transitElement) {
+                        if (remaining <= 0) {
+                            transitElement.innerHTML = "LATE: Incident Reported";
+                            transitElement.style.color = "red";
+                        } else {
+                            let mins = Math.floor(remaining / 60000);
+                            let secs = Math.floor((remaining % 60000) / 1000);
+                            transitElement.innerHTML = mins + "m " + secs + "s";
+                            transitElement.style.color = "#d9534f"; // Soft red/orange
+                        }
+                    }
+                }
+            }, 1000);
+        }
+    }
+});
+</script>
+{% endblock %}

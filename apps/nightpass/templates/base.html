@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+{% load static %}
+
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thapar NightPass</title>
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/barcodes/JsBarcode.code128.min.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
+   
+<link rel="stylesheet" href="{% static 'nightpass/styles.css' %}">
+
+{% block extra_css %}{% endblock %}
+
+</head>
+<body>
+    
+    <div class="header">
+        <img class="header-logo" src="https://cdn.npfs.co/uploads/template/664/6439/publish/images/ti-header-logo.png?1770294954" alt="College Logo">
+        <h1>CAMPUS NIGHT PASS</h1>
+
+        {% if user.is_authenticated %}
+         <button class="logout-button"onclick="window.location.href='/logout';">
+             Logout
+          </button>
+        {% endif %}
+
+    </div>
+    
+    {% if announcement %}
+        <div class="announcement-strip">
+            <marquee behavior="scroll" direction="left">
+                {{ announcement }}
+            </marquee>
+        </div>
+        {% endif %}
+    {% block content %}
+    {% endblock %}
+
+   <footer>
+        Made in TIET by <a href="https://www.linkedin.com/in/aman-kapoor201/" target="_blank" style="text-decoration: underline; color: white;">Aman Kapoor</a> and <a href="https://www.linkedin.com/in/sagarikawankhede/" target="_blank" style="text-decoration: underline; color: white;">Sagarika Wankhede</a> 
+    </footer>
+
+
+<script>
+    toastr.options = {
+            "closeButton": false,
+            "newestOnTop": true,
+            "progressBar": false,
+            "positionClass": "toast-top-right",
+            "preventDuplicates": true,
+            "onclick": null,
+            "showDuration": "300",
+            "hideDuration": "1000",
+            "timeOut": "3000",
+            "extendedTimeOut": "1000",
+            "showEasing": "swing",
+            "hideEasing": "linear",
+            "showMethod": "fadeIn",
+            "hideMethod": "fadeOut"
+        }
+</script>
+
+{% if messages %}
+{% for message in messages %}
+<script>
+  toastr.info("{{ message }}")
+</script>
+{% endfor %}
+{% endif %}
+</body>
+</html>

@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'nightpass/admin_dashboard.css' %}">
+
+{% endblock %}
+{% block content %}
+
+<div class="dashboard-wrapper">
+<div class="dashboard-container">
+
+    <!-- ===== TODAY SUMMARY HEADER ===== -->
+    <div class="summary-header">
+        <h2>
+            DASHBOARD
+            <span>({% now "d M Y" %})</span>
+        </h2>
+        <div class="filters">
+          <button class="filter active" data-filter="all">✔ All</button>
+          <button class="filter" data-filter="library">📚 Library</button>
+          <button class="filter" data-filter="hostel">🏠 At Hostel</button>
+          <button class="filter danger" data-filter="defaulter">🔴 Defaulters</button>
+        </div>
+
+    </div>
+
+
+    <!-- ===== SUMMARY CARDS ===== -->
+    <div class="summary-cards">
+
+        <div class="card">
+            <div class="card-title">🟢 Active Check-ins</div>
+            <div class="card-value">{{ active_checkins }}</div>
+            <div class="card-sub">Students currently checked in</div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">🎓 Total Registered Students</div>
+            <div class="card-value">{{ student_count }}</div>
+            <div class="card-sub">Registered users</div>
+        </div>
+
+        <div class="card danger-card">
+            <div class="card-title">🔴 Students Overdue</div>
+            <div class="card-value">{{ defaulters }}</div>
+            <div class="card-sub">Need attention</div>
+        </div>
+
+    </div>
+
+
+    <!-- ===== RECENT ACTIVITY ===== -->
+    <div class="activity-section">
+
+        <h3>RECENT ACTIVITY</h3>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Student</th>
+                    <th>Hostel</th>
+                    <th>Time</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+           <tbody>
+{% for checkin in recent_checkins %}
+<tr class="activity-row"
+    data-location="{{ checkin.campus_resource.name|lower }}"
+    data-defaulter="{% if checkin.defaulter %}yes{% else %}no{% endif %}">
+
+    <td>{{ checkin.user.student.name }}</td>
+    <td>{{ checkin.user.student.hostel.name }}</td>
+    <td>{{ checkin.start_time }}</td>
+
+    {% if checkin.defaulter %}
+        <td class="status red">● Overdue</td>
+    {% elif checkin.current_step == 2 %}
+        <td class="status green">● Checked In</td>
+    {% else %}
+        <td class="status">● Completed</td>
+    {% endif %}
+</tr>
+{% empty %}
+<tr>
+    <td colspan="4">No recent activity</td>
+</tr>
+{% endfor %}
+</tbody>
+        </table>
+         <p id="no-results" style="display:none; text-align:center; padding:20px; color:#666;">
+          No results found
+         </p>
+
+
+        <!-- ===== ACTION BUTTONS ===== -->
+    <div class="action-buttons">
+
+    <a href="{% url 'simple_student_list' %}" class="primary-btn">
+        Manage Students
+    </a>
+
+    <div class="export-section">
+        <form method="GET" action="{% url 'download_report_range' %}" class="date-range-form">
+
+            <div class="date-group">
+                <label>From</label>
+                <input type="date" name="start_date" required>
+            </div>
+
+            <div class="date-group">
+                <label>To</label>
+                <input type="date" name="end_date" required>
+            </div>
+
+            <button type="submit" class="secondary-btn">
+                Download Excel
+            </button>
+
+        </form>
+    </div>
+
+    <a href="{% url 'analytics' %}" class="secondary-btn">
+        View Analytics
+    </a>
+
+</div>
+
+    </div>
+</div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+
+    const buttons = document.querySelectorAll(".filter");
+    const rows = document.querySelectorAll(".activity-row");
+    const noResults = document.getElementById("no-results");
+
+    buttons.forEach(button => {
+
+        button.addEventListener("click", function () {
+
+            // Active button styling
+            buttons.forEach(btn => btn.classList.remove("active"));
+            button.classList.add("active");
+
+            const filter = button.dataset.filter;
+
+            let visibleCount = 0;
+
+            rows.forEach(row => {
+
+                const location = row.dataset.location;
+                const defaulter = row.dataset.defaulter;
+
+                let show = false;
+
+                if (filter === "all") {
+                    show = true;
+                }
+                else if (filter === "defaulter") {
+                    show = (defaulter === "yes");
+                }
+                else {
+                    show = (location === filter);
+                }
+
+                row.style.display = show ? "" : "none";
+
+                if (show) visibleCount++;
+            });
+
+            // SHOW NO-RESULT MESSAGE
+            if (visibleCount === 0) {
+
+                if (filter === "library")
+                    noResults.textContent = "No Library check-ins";
+
+                else if (filter === "hostel")
+                    noResults.textContent = "No Hostel check-ins";
+
+                else if (filter === "defaulter")
+                    noResults.textContent = "No defaulters found";
+
+                else
+                    noResults.textContent = "No results found";
+
+                noResults.style.display = "block";
+            } else {
+                noResults.style.display = "none";
+            }
+
+        });
+
+    });
+
+});
+</script>
+
+
+{% endblock %}

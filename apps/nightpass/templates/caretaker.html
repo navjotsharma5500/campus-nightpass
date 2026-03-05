@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="table-container">
+    <div class="table-responsive">
+        <table class="custom-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Room No</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+    {% for pass in hostel_passes %}
+    <tr>
+        <td>{{ pass.user.student.name }}</td>
+        <td>{{ pass.user.student.room_number }}</td>
+        
+        <td>
+            {% if pass.user.student.is_checked_in %}
+                <span class="badge green">In Hostel</span>
+            {% else %}
+                {% if pass.is_late_in_transit %}
+                    <span class="badge red pulse-red">LATE: {{ pass.get_current_step_display }}</span>
+                {% elif pass.current_step == 1 %}
+                    <span class="badge orange">Transit to {{ pass.campus_resource }}</span>
+                {% elif pass.current_step == 2 %}
+                    <span class="badge blue">At {{ pass.campus_resource }}</span>
+                {% elif pass.current_step == 3 %}
+                    <span class="badge orange">Returning to Hostel</span>
+                {% else %}
+                    <span class="badge red">Outside</span>
+                {% endif %}
+            {% endif %}
+        </td>
+        
+        <td>
+            <a href="tel:{{ pass.user.student.contact_number }}">
+                <button class="call-btn">Call</button>
+            </a>
+        </td>
+    </tr>
+    {% endfor %}
+</tbody>
+        </table>
+
+    </div>
+</div>
+{% endblock %}

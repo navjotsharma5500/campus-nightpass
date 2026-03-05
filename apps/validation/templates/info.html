@@ -1,0 +1,194 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Campus Night Pass Scanner</title>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+
+    <style>
+        /* --- CSS STYLES --- */
+        * { box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background-color: #f4f7f6; color: #333; }
+        
+        .header { display: flex; align-items: center; justify-content: center; background: white; height: 80px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); position: relative; }
+        .header-logo { position: absolute; left: 20px; width: 70px; }
+        .header h1 { color: #eb1b23; font-size: 24px; margin: 0; }
+        .logout-button { position: absolute; right: 20px; background: #eb1b23; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; }
+
+        .main-layout { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 30px; max-width: 1200px; margin: 30px auto; padding: 0 20px; }
+
+        /* Left Card - Info */
+        .main-card { background: white; border-radius: 12px; padding: 25px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); align-items: start; }
+        
+        .profile-card { text-align: center; border-right: 1px solid #eee; padding-right: 15px; }
+        .profile-picture { width: 180px; height: 180px; border-radius: 50%; object-fit: cover; border: 3px solid #eee; margin-bottom: 15px; }
+        
+        .pass-card { padding: 15px; border-radius: 10px; background: #fafafa; border-left: 5px solid #ccc; transition: all 0.3s ease; }
+        .pass-details h2 { margin-top: 0; font-size: 18px; color: #eb1b23; }
+        .pass-details p { margin: 8px 0; font-size: 14px; border-bottom: 1px solid #f0f0f0; padding-bottom: 4px; }
+
+        /* Status Colors */
+        .valid { background: #e8f5e9 !important; border-color: #4caf50 !important; }
+        .invalid { background: #ffebee !important; border-color: #f44336 !important; animation: shake 0.4s; }
+        .warning { background: #fffde7 !important; border-color: #fbc02d !important; }
+
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+
+        /* Right Card - Scanner */
+        .camera-card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        .viewport { width: 100%; height: 250px; background: #000; border-radius: 8px; overflow: hidden; position: relative; }
+        .viewport video, .viewport canvas { width: 100%; height: 100%; object-fit: cover; }
+        
+        .roll-no { width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 6px; font-size: 16px; }
+        .action-button { width: 100%; padding: 12px; background: #eb1b23; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+
+        @media (max-width: 900px) { .main-layout { grid-template-columns: 1fr; } .main-card { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <img class="header-logo" src="https://cdn.npfs.co/uploads/template/664/6439/publish/images/ti-header-logo.png?1770294954">
+    <h1>CAMPUS NIGHT PASS</h1>
+    <button class="logout-button" onclick="location.href='/logout'">Logout</button>
+</div>
+
+<div class="main-layout">
+    <div class="main-card">
+        <div class="profile-card">
+            <img id="student-picture" src="https://static.vecteezy.com/system/resources/previews/005/129/844/non_2x/profile-user-icon-isolated-on-white-background-eps10-free-vector.jpg" class="profile-picture">
+            <h3 id="student-name-display" style="margin:10px 0 5px 0;">Waiting for Scan...</h3>
+            <p id="student-reg-display" style="color:#666; font-size:14px;">Registration: -</p>
+        </div>
+
+        <div class="pass-card" id="pass-ui-container">
+    <div class="pass-details">
+        <h2>Student Information</h2>
+        <p><strong>Hostel:</strong> <span id="ui-hostel">-</span></p>
+        <button id="action-button" class="action-button" style="display: none;">PROCESS</button>
+    </div>
+</div>
+    </div>
+
+    <div class="camera-card">
+        <input type="number" placeholder="Manual Roll Number" id="roll_num" class="roll-no" autofocus>
+        <div id="camera" class="viewport"></div>
+        <div style="margin-top:15px; padding-top:10px; border-top:1px solid #eee;">
+            <h4 style="margin:5px 0; color:green;">Checked In: <span id="stat-checkin">{{ check_in_count }}</span></h4>
+            <h4 style="margin:5px 0; color:#444;">Active Passes: <span id="stat-total">{{ total_count }}</span></h4>
+        </div>
+    </div>
+</div>
+
+<script>
+    /* --- JAVASCRIPT LOGIC --- */
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1)); break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    $.ajaxSetup({ headers: { "X-CSRFToken": getCookie('csrftoken') } });
+
+    let resetTimer;
+    function resetDisplay() {
+        $("#student-picture").attr("src", "https://static.vecteezy.com/system/resources/previews/005/129/844/non_2x/profile-user-icon-isolated-on-white-background-eps10-free-vector.jpg");
+        $("#student-name-display").text("Waiting for Scan...");
+        $("#student-reg-display").text("Registration: -");
+        $("#ui-hostel").text("-");
+        $("#pass-ui-container").removeClass("valid invalid warning");
+        $("#action-button");
+    }
+
+    function handleFetchSuccess(data) {
+        if (!data.status) {
+            toastr.error(data.message);
+            $("#pass-ui-container").addClass("invalid");
+            return;
+        }
+        toastr.success(data.message);
+
+        clearTimeout(resetTimer);
+        const user = data.user;
+        const pass = data.user_pass;
+        const task = data.task;
+
+        // Update UI Text
+        $("#student-picture").attr("src", user.picture);
+        $("#student-name-display").text(user.name);
+        $("#student-reg-display").text("Registration: " + user.registration_number);
+        
+        $("#ui-hostel").text(user.hostel || "-");
+
+        $("#pass-ui-container").removeClass("valid invalid warning");
+
+        // Action Logic
+        const btn = $("#action-button");
+        if (task.check_out) {
+            $("#pass-ui-container").addClass("warning");
+            btn.text("CHECK OUT").show().off().on('click', () => runAction('checkout', user.registration_number));
+        } else if (task.check_in) {
+            $("#pass-ui-container").addClass("valid");
+            btn.text("CHECK IN").show().off().on('click', () => runAction('checkin', user.registration_number));
+        }
+
+        new Audio("/static/validation/beep.mp3").play().catch(()=>{});
+        resetTimer = setTimeout(resetDisplay, 10000);
+    }
+
+    function runAction(type, reg) {
+        $.post(type + "/", { registration_number: reg }, function(res) {
+            if (res.status) {
+                toastr.success(res.message);
+                if (res.student_stats) {
+                    $("#stat-checkin").text(res.student_stats.check_in_count);
+                    $("#stat-total").text(res.student_stats.total_count);
+                }
+                setTimeout(resetDisplay, 2000);
+            } else {
+                toastr.error(res.message);
+            }
+        });
+    }
+
+    // Input Trigger
+    $("#roll_num").on("input", function() {
+        if ($(this).val().length === 10) {
+            $.post("/access/extension/fetchuser/performtask/", { registration_number: $(this).val() }, handleFetchSuccess);
+            $(this).val("");
+        }
+    });
+
+    // Scanner Init
+    Quagga.init({
+        inputStream: { type: "LiveStream", target: document.querySelector('#camera'), constraints: { facingMode: "environment" } },
+        decoder: { readers: ["code_128_reader"] }
+    }, (err) => { if (!err) Quagga.start(); });
+
+    let lock = false;
+    Quagga.onDetected((res) => {
+        let code = res.codeResult.code;
+        if (!lock && code.length === 10) {
+            lock = true;
+            $.post("/access/extension/fetchuser/performtask/", { registration_number: code }, handleFetchSuccess);
+            setTimeout(() => { lock = false; }, 5000);
+        }
+    });
+</script>
+
+</body>
+</html>

@@ -1,0 +1,238 @@
+/* ===== Student Profile Page ===== */
+body {
+    background:#f0f2f5;
+}
+
+.main-layout {
+    display: grid;
+    grid-template-columns: 360px 1fr;
+    gap: 32px;
+    align-items: start;
+
+    max-width: 1200px;
+    margin: 40px auto;
+    padding: 0 20px;
+}
+
+@media (max-width: 900px) {
+    .main-layout {
+        grid-template-columns: 1fr;
+    }
+}
+
+
+.profile-card {
+    border-radius: 18px;
+    padding: 28px;
+    background: #ffffff;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.08);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.profile-images {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.profile-img {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 4px solid #eb1b23;
+}
+
+.profile-details {
+    width: 100%;
+    font-size: 15px;
+    color: #333;
+}
+
+.profile-details p {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid #eee;
+}
+
+.profile-details strong {
+    color: #666;
+    font-weight: 500;
+}
+
+.safe {
+    color: #0a8f3c;
+    font-weight: 600;
+}
+
+.unsafe {
+    color: #c62828;
+    font-weight: 600;
+}
+
+.location-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 24px;
+}
+
+.resource-card {
+    background: #ffffff;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 10px 24px rgba(0,0,0,0.06);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+
+    display: flex;
+    flex-direction: column; /* IMPORTANT */
+}
+.resource-img {
+    width: 100%;
+    height: 180px;
+    object-fit: cover;
+}
+
+.resource-details {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+}
+
+
+
+.resource-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 14px 30px rgba(0,0,0,0.1);
+}
+
+.resource-details h2 {
+    font-size: 18px;
+    margin-bottom: 6px;
+}
+
+.resource-details p {
+    font-size: 14px;
+    color: #666;
+    margin-bottom: 12px;
+}
+
+.book-button {
+    margin-top: auto;
+    background-color: #eb1b23;
+    color: white;
+    border: none;
+    padding: 10px 16px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+
+.book-button:hover {
+    background-color: #d8171f;
+}
+.book-button.gray {
+    background-color: #bbb;
+    cursor: not-allowed;
+}
+
+.table-section h2 {
+    margin-bottom: 16px;
+}
+
+.activity-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.activity-table th {
+    background: #eb1b23;
+    color: white;
+    font-weight: 500;
+}
+
+.activity-table th,
+.activity-table td {
+    padding: 12px 14px;
+    font-size: 14px;
+}
+
+.activity-table tr:nth-child(even) {
+    background: #fafafa;
+}
+
+@media (max-width: 900px) {
+    .container {
+        grid-template-columns: 1fr;
+    }
+}
+
+
+
+
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 999;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(4px);
+    justify-content: center;
+    align-items: center;
+}
+.modal-content {
+    background: white;
+    width: 500px;
+    border-radius: 16px;
+    padding: 30px;
+    display: flex;
+    gap: 25px;
+    align-items: center;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+    animation: fadeIn 0.3s ease;
+}
+.modal-image img {
+    width: 150px;
+    height: 100px;
+    object-fit: cover;
+    border-radius: 12px;
+}
+.modal-details h2 {
+    margin: 0 0 8px;
+}
+
+.modal-details p {
+    color: #666;
+    margin-bottom: 20px;
+}
+.modal-button {
+    padding: 10px 20px;
+    background: linear-gradient(135deg, #ff4b2b, #ff416c);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+}
+.close {
+    position: absolute;
+    top: 15px;
+    right: 20px;
+    font-size: 20px;
+    cursor: pointer;
+}
+

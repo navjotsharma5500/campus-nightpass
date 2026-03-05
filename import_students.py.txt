@@ -1,0 +1,56 @@
+import csv
+import os
+import django
+
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'core.settings')
+django.setup()
+
+from apps.validation.models import Student, CustomUser
+from apps.nightpass.models import Hostel
+
+DEFAULT_PASSWORD = "ChangeMe123"
+
+with open('master_students.csv', newline='', encoding='utf-8') as file:
+    reader = csv.DictReader(file)
+
+    for row in reader:
+        email = row['email'].strip()
+
+        # 1️⃣ Create User
+        user, created = CustomUser.objects.get_or_create(
+            email=email,
+            defaults={
+                'user_type': 'student',
+            }
+        )
+
+        if created:
+            user.set_password(DEFAULT_PASSWORD)
+            user.save()
+
+        # 2️⃣ Find Hostel
+        hostel_name = row['Building_name'].strip()
+        hostel = Hostel.objects.filter(name=hostel_name).first()
+
+        if not hostel:
+            print(f"⚠ Hostel not found: {hostel_name}")
+            continue
+
+        # 3️⃣ Create Student
+        Student.objects.update_or_create(
+            user=user,
+            defaults={
+                'name': row['name'],
+                'registration_number': row['registration_number'],
+                'gender': row['gender'].lower(),
+                'room_number': row['room_number'],
+                'contact_number': row['contact_number'],
+                'email': email,
+                'parent_contact': row['parent_contact'],
+                'hostel': hostel,
+            }
+        )
+
+        print(f"✅ Imported: {row['name']}")
+
+print("🎉 Import Complete")
