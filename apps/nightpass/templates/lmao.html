@@ -48,18 +48,18 @@
 
                     {% if resource == user_pass.campus_resource %}
                         <button class="book-button gray"
-                                onclick="openModal('{{ resource.name }}',
-                                                   '{{ resource.description }}',
-                                                   '{{ resource.picture }}',
+                                onclick="openModal('{{ resource.name|escapejs }}',
+                                                   '{{ resource.description|escapejs }}',
+                                                   '{{ resource.picture|escapejs }}',
                                                    false)">
                             Cancel Slot
                         </button>
                     {% else %}
                         {% if resource.is_booking %}
                             <button class="book-button"
-                                    onclick="openModal('{{ resource.name }}',
-                                                       '{{ resource.description }}',
-                                                       '{{ resource.picture }}',
+                                    onclick="openModal('{{ resource.name|escapejs }}',
+                                                       '{{ resource.description|escapejs }}',
+                                                       '{{ resource.picture|escapejs }}',
                                                        true)">
                                 Book Slot
                             </button>
@@ -143,7 +143,7 @@ function openModal(name, description, picture, isBooking) {
     document.getElementById('modal-resource-picture').src = picture;
 
     let btn = document.getElementById('modal-resource-book');
-    let url = isBooking ? "book/" + name : "cancel/";
+    let url = isBooking ? "book/" + encodeURIComponent(name) : "cancel/";
     let confirmMsg = isBooking ? "Do you want to book this slot?" : "Cancel your booking?";
 
     btn.innerText = isBooking ? "Confirm Booking" : "Confirm Cancellation";
