@@ -41,6 +41,7 @@ def campus_resources_home(request):
 def generate_pass(request, campus_resource):
     user = request.user
     campus_resource = CampusResource.objects.get(name=campus_resource)
+    today_valid_passes = NightPass.objects.filter(valid=True, date=date.today(), campus_resource=campus_resource)
     
     if (campus_resource.is_display == False) or not campus_resource.is_booking:
         data = {
@@ -67,8 +68,7 @@ def generate_pass(request, campus_resource):
 
     if Settings.enable_gender_ratio:
         if user.student.gender == 'male':
-            male_pass_count = NightPass.objects.filter(valid=True, campus_resource=campus_resource,
-                                                        user__student__gender='male').count()
+            male_pass_count = today_valid_passes.filter(user__student__gender='male').count()
             if (male_pass_count > Settings.male_ratio*(campus_resource.max_capacity)) or Settings.male_ratio==float(0):
                 data = {
                 'status':False,
@@ -77,8 +77,7 @@ def generate_pass(request, campus_resource):
                 return HttpResponse(json.dumps(data))
 
         elif user.student.gender == 'female':
-            female_pass_count = NightPass.objects.filter(valid=True, campus_resource=campus_resource, 
-                                                         user__student__gender='female').count()
+            female_pass_count = today_valid_passes.filter(user__student__gender='female').count()
             if (female_pass_count > Settings.female_ratio*(campus_resource.max_capacity)) or Settings.female_ratio==float(0) :
                 data = {
                 'status':False,
@@ -92,31 +91,22 @@ def generate_pass(request, campus_resource):
                 'message':'All slots are booked for today!'
                 }
         student_year = int(user.student.year)
-        if student_year == 1:
-            student_year_pass_count = NightPass.objects.filter(valid=True, campus_resource=campus_resource, 
-                                                         user__student__year='1').count()
-            if student_year_pass_count >= Settings.first_year:
-                return HttpResponse(json.dumps(data))
-        elif student_year == 2:
-            student_year_pass_count = NightPass.objects.filter(valid=True, campus_resource=campus_resource, 
-                                                         user__student__year='2').count()
-            if student_year_pass_count >= Settings.second_year:
-                return HttpResponse(json.dumps(data))
-        elif student_year == 3:
-            student_year_pass_count = NightPass.objects.filter(valid=True, campus_resource=campus_resource, 
-                                                         user__student__year='3').count()
-            if student_year_pass_count >= Settings.third_year:
-                return HttpResponse(json.dumps(data))
-        elif student_year == 4:
-            student_year_pass_count = NightPass.objects.filter(valid=True, campus_resource=campus_resource, 
-                                                         user__student__year='4').count()
-            if student_year_pass_count >= Settings.fourth_year:
+        year_limits = {
+            1: Settings.first_year,
+            2: Settings.second_year,
+            3: Settings.third_year,
+            4: Settings.fourth_year
+        }
+        year_limit = year_limits.get(student_year)
+        if year_limit and year_limit > 0:
+            student_year_pass_count = today_valid_passes.filter(user__student__year=str(student_year)).count()
+            if student_year_pass_count >= year_limit:
                 return HttpResponse(json.dumps(data))
             
     if Settings.enable_hostel_limits:
-        student_hostel_pass_count = NightPass.objects.filter(valid=True, campus_resource=campus_resource, 
-                                                         user__student__hostel=user.student.hostel).count()
-        if student_hostel_pass_count >= user.student.hostel.max_students_allowed:
+        hostel_limit = user.student.hostel.max_students_allowed
+        student_hostel_pass_count = today_valid_passes.filter(user__student__hostel=user.student.hostel).count()
+        if hostel_limit and hostel_limit > 0 and student_hostel_pass_count >= hostel_limit:
             data = {
                 'status':False,
                 'message':'All slots are booked for today!'
