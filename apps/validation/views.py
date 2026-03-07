@@ -1,3 +1,6 @@
+#views.py inside of validation
+
+
 from django.shortcuts import render, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.decorators import login_required, user_passes_test
@@ -7,6 +10,7 @@ from django.db.models.functions import TruncDay, TruncMonth
 from datetime import datetime, date, timedelta
 import json
 import requests
+from django.shortcuts import redirect
 
 from ..users.models import NightPass, Student
 from ..nightpass.models import CampusResource, Hostel
@@ -156,16 +160,45 @@ def kiosk_extension(request):
         return json_response({'status': False, 'message': 'No active pass found for this student.'})
 
     # Execute the step logic
-    if user_pass.current_step == 0:
-        response = checkout_from_hostel(user_pass)
-    elif user_pass.current_step == 1:
-        response = checkin_to_location(user_pass, "Library")
-    elif user_pass.current_step == 2:
-        response = checkout_from_location(user_pass, "Library")
-    elif user_pass.current_step == 3:
-        response = checkin_to_hostel(student)
-    else:
-        return json_response({'status': False, 'message': 'Pass is in an invalid state.'})
+    # --- THE SKIP LOGIC ---
+# STEP SYSTEM
+
+    if user_pass.pass_type == "OUTSIDE":
+
+        if user_pass.current_step == 0:
+            # Skip hostel exit completely
+            user_pass.current_step = 1
+            user_pass.hostel_checkout_time = timezone.now()
+            user_pass.save()
+
+        if user_pass.current_step == 1:
+            response = checkin_to_location(user_pass, "Library")
+
+        elif user_pass.current_step == 2:
+            response = checkout_from_location(user_pass, "Library")
+
+        elif user_pass.current_step == 3:
+            response = checkin_to_hostel(student)
+
+        else:
+            return json_response({'status': False, 'message': 'Invalid OUTSIDE pass state.'})
+    else:  # HOSTEL PASS
+
+        if user_pass.current_step == 0:
+            response = checkout_from_hostel(user_pass)
+
+        elif user_pass.current_step == 1:
+            response = checkin_to_location(user_pass, "Library")
+
+        elif user_pass.current_step == 2:
+            response = checkout_from_location(user_pass, "Library")
+
+        elif user_pass.current_step == 3:
+            response = checkin_to_hostel(student)
+
+        else:
+            return json_response({'status': False, 'message': 'Invalid HOSTEL pass state.'})
+
 
     # Convert the logic response to a dict so we can add student info to it
     # This is the "Data Fetching" part your frontend is looking for

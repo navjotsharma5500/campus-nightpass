@@ -4,7 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Campus Library Night Pass Scanner</title>
+    <title>Campus Night Pass Scanner</title>
+    
 
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
@@ -55,7 +56,7 @@
 
 <div class="header">
     <img class="header-logo" src="https://cdn.npfs.co/uploads/template/664/6439/publish/images/ti-header-logo.png?1770294954">
-    <h1>CAMPUS LIBRARY NIGHT PASS</h1>
+    <h1>CAMPUS NIGHT PASS</h1>
     <button class="logout-button" onclick="location.href='/logout'">Logout</button>
 </div>
 
@@ -87,6 +88,14 @@
 </div>
 
 <script>
+    let scanCooldown = false;
+
+    function startCooldown() {
+    scanCooldown = true;
+    setTimeout(() => {
+        scanCooldown = false;
+    }, 5000); // 5 seconds
+}
     /* --- JAVASCRIPT LOGIC --- */
     function getCookie(name) {
         let cookieValue = null;
@@ -166,12 +175,23 @@
     }
 
     // Input Trigger
-    $("#roll_num").on("input", function() {
-        if ($(this).val().length === 10) {
-            $.post("/access/extension/fetchuser/performtask/", { registration_number: $(this).val() }, handleFetchSuccess);
-            $(this).val("");
-        }
-    });
+ $("#roll_num").on("input", function() {
+
+    if (scanCooldown) return;
+
+    if ($(this).val().length === 10) {
+
+        startCooldown();
+
+        $.post(
+            "/access/extension/fetchuser/performtask/",
+            { registration_number: $(this).val() },
+            handleFetchSuccess
+        );
+
+        $(this).val("");
+    }
+});
 
     // Scanner Init
     Quagga.init({
@@ -179,15 +199,24 @@
         decoder: { readers: ["code_128_reader"] }
     }, (err) => { if (!err) Quagga.start(); });
 
-    let lock = false;
-    Quagga.onDetected((res) => {
-        let code = res.codeResult.code;
-        if (!lock && code.length === 10) {
-            lock = true;
-            $.post("/access/extension/fetchuser/performtask/", { registration_number: code }, handleFetchSuccess);
-            setTimeout(() => { lock = false; }, 5000);
-        }
-    });
+Quagga.onDetected((res) => {
+
+    if (scanCooldown) return;
+
+    let code = res.codeResult.code;
+
+    if (code.length === 10) {
+
+        startCooldown();
+
+        $.post(
+            "/access/extension/fetchuser/performtask/",
+            { registration_number: code },
+            handleFetchSuccess
+        );
+    }
+
+});
 </script>
 
 </body>

@@ -1,3 +1,5 @@
+#models.py inside of user.py 
+
 from datetime import timedelta
 from django.db import models
 from django.contrib.auth.models import AbstractUser
@@ -134,7 +136,7 @@ class NightPass(models.Model):
 
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
     pass_id = models.CharField(max_length=20, unique=True, primary_key=True, editable=False)
-    pass_type = models.CharField(max_length=10, choices=TYPE_CHOICES, default='HOSTEL')
+    pass_type = models.CharField(max_length=20, choices=TYPE_CHOICES, default='HOSTEL')
 
     start_time = models.TimeField()
     end_time = models.DateTimeField()
@@ -161,15 +163,15 @@ class NightPass(models.Model):
             self.pass_id = f"PASS-{random.randint(1000, 99999)}"
 
         # FORCE the pass_type to match the Resource setting during creation
-        if not self.pk and self.campus_resource:
-            # This pulls the 'OUTSIDE' or 'HOSTEL' setting from your Admin configuration
+        if self.campus_resource:
+            # Always sync pass_type with resource
             self.pass_type = self.campus_resource.default_pass_type
-            
-            # If it's an outside/library pass, skip step 0 (Caretaker)
-            if self.pass_type == 'OUTSIDE':
-                self.current_step = 1 
-            else:
-                self.current_step = 0
+
+            if not self.pk:
+                if self.pass_type == 'OUTSIDE':
+                    self.current_step = 1
+                else:
+                    self.current_step = 0
 
         super().save(*args, **kwargs)
 
