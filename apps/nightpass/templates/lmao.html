@@ -95,7 +95,8 @@
     "registration_number": "{{ student.registration_number|default:'' }}",
     "current_step": {{ user_pass.current_step|default:-1 }},
     "hostel_checkout_time": "{{ user_pass.hostel_checkout_time|date:'c'|default:'' }}",
-    "library_out_time": "{{ user_pass.library_out_time|date:'c'|default:'' }}"
+    "library_out_time": "{{ user_pass.library_out_time|date:'c'|default:'' }}",
+    "transit_timer_minutes": {{ transit_timer_minutes|default:40 }}
 }
 </script>
 
@@ -213,8 +214,8 @@ document.addEventListener("DOMContentLoaded", function () {
                 let now = new Date().getTime();
                 let startTime = new Date(transitStart).getTime();
                 if (!isNaN(startTime)) {
-                    // UPDATED: 40 Minutes (40 * 60 * 1000 ms)
-                    let deadline = startTime + (40 * 60 * 1000); 
+                    let timerMinutes = Number(passData.transit_timer_minutes || 40);
+                    let deadline = startTime + (timerMinutes * 60 * 1000); 
                     let remaining = deadline - now;
                     
                     let transitElement = document.getElementById("transit-timer");

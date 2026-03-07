@@ -57,6 +57,10 @@
 <div class="header">
     <img class="header-logo" src="https://cdn.npfs.co/uploads/template/664/6439/publish/images/ti-header-logo.png?1770294954">
     <h1>CAMPUS NIGHT PASS</h1>
+    <div style="position:absolute; right:120px; text-align:right; font-size:13px; color:#444;">
+        <div><strong>Scanner:</strong> {{ security_location }}</div>
+        <div><strong>Window:</strong> {{ scan_window_text }}</div>
+    </div>
     <button class="logout-button" onclick="location.href='/logout'">Logout</button>
 </div>
 
@@ -78,7 +82,7 @@
     </div>
 
     <div class="camera-card">
-        <input type="number" placeholder="Manual Roll Number" id="roll_num" class="roll-no" autofocus>
+        <input type="text" placeholder="Manual Roll Number" id="roll_num" class="roll-no" autofocus>
         <div id="camera" class="viewport"></div>
         <div style="margin-top:15px; padding-top:10px; border-top:1px solid #eee;">
             <h4 style="margin:5px 0; color:green;">Checked In: <span id="stat-checkin">{{ check_in_count }}</span></h4>
@@ -89,6 +93,7 @@
 
 <script>
     let scanCooldown = false;
+    let invalidCodeCooldown = false;
 
     function startCooldown() {
     scanCooldown = true;
@@ -96,6 +101,50 @@
         scanCooldown = false;
     }, 5000); // 5 seconds
 }
+
+    function showInvalidCodeToast() {
+        if (invalidCodeCooldown) return;
+        invalidCodeCooldown = true;
+        toastr.error("Invalid barcode format.");
+        setTimeout(() => { invalidCodeCooldown = false; }, 3000);
+    }
+
+    function normalizeRegistration(raw) {
+        if (!raw) return null;
+        const text = String(raw).trim();
+        if (!text) return null;
+
+        const compact = text.replace(/[^A-Za-z0-9]/g, "");
+        if (compact.length >= 6 && compact.length <= 20) return compact;
+
+        const digitBlock = text.match(/\d{10}/);
+        if (digitBlock) return digitBlock[0];
+
+        if (/^[A-Za-z0-9-]{6,20}$/.test(text)) return text;
+        return null;
+    }
+
+    function submitScan(rawCode) {
+        if (scanCooldown) return;
+        const registration = normalizeRegistration(rawCode);
+        if (!registration) {
+            showInvalidCodeToast();
+            return;
+        }
+
+        startCooldown();
+        $.ajax({
+            method: "POST",
+            url: "/access/extension/fetchuser/performtask/",
+            dataType: "json",
+            data: { registration_number: registration },
+            success: handleFetchSuccess,
+            error: function() {
+                toastr.error("Scan request failed. Please try again.");
+                $("#pass-ui-container").addClass("invalid");
+            }
+        });
+    }
     /* --- JAVASCRIPT LOGIC --- */
     function getCookie(name) {
         let cookieValue = null;
@@ -124,8 +173,17 @@
     }
 
     function handleFetchSuccess(data) {
+        if (typeof data === "string") {
+            try {
+                data = JSON.parse(data);
+            } catch (e) {
+                toastr.error("Invalid server response.");
+                $("#pass-ui-container").addClass("invalid");
+                return;
+            }
+        }
         if (!data.status) {
-            toastr.error(data.message);
+            toastr.error(data.message || "Scan rejected.");
             $("#pass-ui-container").addClass("invalid");
             return;
         }
@@ -175,47 +233,34 @@
     }
 
     // Input Trigger
- $("#roll_num").on("input", function() {
-
-    if (scanCooldown) return;
-
-    if ($(this).val().length === 10) {
-
-        startCooldown();
-
-        $.post(
-            "/access/extension/fetchuser/performtask/",
-            { registration_number: $(this).val() },
-            handleFetchSuccess
-        );
-
-        $(this).val("");
-    }
+ $("#roll_num").on("keydown", function(e) {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const val = $(this).val();
+    submitScan(val);
+    $(this).val("");
 });
 
     // Scanner Init
     Quagga.init({
         inputStream: { type: "LiveStream", target: document.querySelector('#camera'), constraints: { facingMode: "environment" } },
-        decoder: { readers: ["code_128_reader"] }
+        locate: true,
+        decoder: {
+            readers: [
+                "code_128_reader",
+                "code_39_reader",
+                "codabar_reader",
+                "upc_reader",
+                "upc_e_reader",
+                "ean_reader",
+                "ean_8_reader"
+            ]
+        }
     }, (err) => { if (!err) Quagga.start(); });
 
 Quagga.onDetected((res) => {
-
-    if (scanCooldown) return;
-
     let code = res.codeResult.code;
-
-    if (code.length === 10) {
-
-        startCooldown();
-
-        $.post(
-            "/access/extension/fetchuser/performtask/",
-            { registration_number: code },
-            handleFetchSuccess
-        );
-    }
-
+    submitScan(code);
 });
 </script>
 

@@ -1,0 +1,95 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrastyle %}
+{{ block.super }}
+<link rel="stylesheet" href="{% static 'admin/custom_admin_dashboard.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="np-admin-shell">
+    <section class="np-admin-hero" id="fm-hero-fallback">
+        <div class="np-admin-kicker">Thapar NightPass</div>
+        <h1>Super Admin Control Center</h1>
+        <p>Monitor operations, open modules, and manage campus permissions from one place.</p>
+    </section>
+
+    <section class="np-admin-grid">
+        <article class="np-stat-card">
+            <p class="label">Total Modules</p>
+            <p class="value">{{ app_list|length }}</p>
+        </article>
+        <article class="np-stat-card">
+            <p class="label">Environment</p>
+            <p class="value">{% if user.is_superuser %}Super Admin{% else %}Admin{% endif %}</p>
+        </article>
+        <article class="np-stat-card">
+            <p class="label">Access</p>
+            <p class="value">Live</p>
+        </article>
+    </section>
+
+    <section class="np-admin-panels">
+        {% if app_list %}
+        {% for app in app_list %}
+        <div class="np-app-panel">
+            <div class="np-panel-head">
+                <h2>{{ app.name }}</h2>
+                {% if app.app_url %}
+                <a href="{{ app.app_url }}">Open</a>
+                {% endif %}
+            </div>
+            <div class="np-model-grid">
+                {% for model in app.models %}
+                <div class="np-model-card">
+                    <h3>{{ model.name }}</h3>
+                    <div class="np-actions">
+                        {% if model.admin_url %}
+                        <a class="btn ghost" href="{{ model.admin_url }}">View</a>
+                        {% endif %}
+                        {% if model.add_url %}
+                        <a class="btn solid" href="{{ model.add_url }}">Add</a>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <p class="np-empty">{% translate "You don't have permission to view or edit anything." %}</p>
+        {% endif %}
+    </section>
+</div>
+
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/framer-motion/dist/framer-motion.js"></script>
+<script>
+  (function () {
+    if (!window.React || !window.ReactDOM || !window.framerMotion) return;
+    const rootEl = document.getElementById("fm-hero-fallback");
+    if (!rootEl) return;
+
+    const e = window.React.createElement;
+    const motion = window.framerMotion.motion;
+
+    function Hero() {
+      return e(
+        motion.section,
+        {
+          className: "np-admin-hero",
+          initial: { opacity: 0, y: 24 },
+          animate: { opacity: 1, y: 0 },
+          transition: { duration: 0.5, ease: "easeOut" }
+        },
+        e("div", { className: "np-admin-kicker" }, "Thapar NightPass"),
+        e("h1", null, "Super Admin Control Center"),
+        e("p", null, "Monitor operations, open modules, and manage campus permissions from one place.")
+      );
+    }
+
+    window.ReactDOM.createRoot(rootEl).render(e(Hero));
+  })();
+</script>
+{% endblock %}

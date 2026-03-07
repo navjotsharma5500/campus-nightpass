@@ -12,6 +12,14 @@ from urllib.parse import urlencode
 import json
 
 
+def get_post_login_redirect(user):
+    if getattr(user, 'user_type', None) == 'admin':
+        return '/access/admin-dashboard'
+    if getattr(user, 'user_type', None) == 'security':
+        return '/access'
+    return '/'
+
+
 def gauth(request):
     # Load configuration from JSON file
     print(request.build_absolute_uri('/accounts/google/login/callback/'))
@@ -89,7 +97,7 @@ def oauth_callback(request):
             if user and user.has_related_object():
                 messages.success(request, 'Logged in successfully.')
                 login(request, user=user)
-                return HttpResponseRedirect('/')
+                return HttpResponseRedirect(get_post_login_redirect(user))
             else:
                 messages.error(request, 'Please use Thapar ID or contact DOSA office.')
                 return HttpResponseRedirect('/')
@@ -111,7 +119,7 @@ def login_user(request):
         else:
             return render(request=request, template_name='index.html')
     else:
-        return redirect('/')
+        return redirect(get_post_login_redirect(request.user))
 
 
 def logout_user(request):

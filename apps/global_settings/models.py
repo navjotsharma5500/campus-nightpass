@@ -6,9 +6,18 @@ class Settings(models.Model):
     enable_hostel_timers = models.BooleanField(default=False, help_text="Enabling activates the time limits specified in the Hostel profile. The timers below, however, will not be operational.")
     frontend_checkin_timer = models.IntegerField(blank=True, null=True, default=0)
     backend_checkin_timer = models.IntegerField(blank=True, null=True, default=0)
+    scan_start_time = models.TimeField(blank=True, null=True, help_text="Scanner start time window.")
+    scan_end_time = models.TimeField(blank=True, null=True, help_text="Scanner end time window.")
 
-    last_entry_without_hostel_checkout = models.TimeField(blank=True, null=True)
-    valid_entry_without_hostel_checkout = models.TimeField(blank=True, null=True)
+    last_out_from_hostel = models.TimeField(blank=True, null=True, verbose_name="Last Out From Hostel")
+
+    allow_monday = models.BooleanField(default=True)
+    allow_tuesday = models.BooleanField(default=True)
+    allow_wednesday = models.BooleanField(default=True)
+    allow_thursday = models.BooleanField(default=True)
+    allow_friday = models.BooleanField(default=True)
+    allow_saturday = models.BooleanField(default=True)
+    allow_sunday = models.BooleanField(default=False)
 
     enable_gender_ratio = models.BooleanField(default=False)
     male_ratio = models.FloatField(blank=True, null=True, default=0.5)

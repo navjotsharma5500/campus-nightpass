@@ -117,15 +117,24 @@ class Student(models.Model):
         return active_pass.status_message
 
 class Security(models.Model):
+    SCANNER_HOSTEL = "HOSTEL"
+    SCANNER_LIBRARY = "LIBRARY"
+    SCANNER_TYPE_CHOICES = (
+        (SCANNER_HOSTEL, "Hostel"),
+        (SCANNER_LIBRARY, "Library"),
+    )
+
     name = models.CharField(max_length=100)
     admin_incharge = models.ForeignKey(Admin, on_delete=models.DO_NOTHING, null=True, blank=True)
+    scanner_type = models.CharField(max_length=20, choices=SCANNER_TYPE_CHOICES, default=SCANNER_LIBRARY)
     hostel = models.ForeignKey(Hostel, on_delete=models.CASCADE, null=True, blank=True)
     user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, primary_key=True)
 
     def __str__(self):
         return self.name
-    
+
     class Meta:
+        verbose_name = 'Security'
         verbose_name_plural = 'Security'
 
 class NightPass(models.Model):
@@ -167,7 +176,7 @@ class NightPass(models.Model):
             # Always sync pass_type with resource
             self.pass_type = self.campus_resource.default_pass_type
 
-            if not self.pk:
+            if self._state.adding:
                 if self.pass_type == 'OUTSIDE':
                     self.current_step = 1
                 else:

@@ -18,8 +18,9 @@
         </h2>
         <div class="filters">
           <button class="filter active" data-filter="all">✔ All</button>
-          <button class="filter" data-filter="library">📚 Library</button>
-          <button class="filter" data-filter="hostel">🏠 At Hostel</button>
+          <button class="filter" data-filter="in_transit">🚌 In Transit</button>
+          <button class="filter" data-filter="in_library">📚 In Library</button>
+          <button class="filter" data-filter="completed">✅ Completed</button>
           <button class="filter danger" data-filter="defaulter">🔴 Defaulters</button>
         </div>
 
@@ -32,7 +33,7 @@
         <div class="card">
             <div class="card-title">🟢 Active Check-ins</div>
             <div class="card-value">{{ active_checkins }}</div>
-            <div class="card-sub">Students currently checked in</div>
+            <div class="card-sub">Currently in library</div>
         </div>
 
         <div class="card">
@@ -41,10 +42,40 @@
             <div class="card-sub">Registered users</div>
         </div>
 
+        <div class="card">
+            <div class="card-title">📌 Active Passes</div>
+            <div class="card-value">{{ active_passes }}</div>
+            <div class="card-sub">Open journeys</div>
+        </div>
+
         <div class="card danger-card">
             <div class="card-title">🔴 Students Overdue</div>
             <div class="card-value">{{ defaulters }}</div>
-            <div class="card-sub">Need attention</div>
+            <div class="card-sub">Defaulters today</div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">🚌 In Transit</div>
+            <div class="card-value">{{ in_transit }}</div>
+            <div class="card-sub">Between scan points</div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">✅ Completed Today</div>
+            <div class="card-value">{{ completed_today }}</div>
+            <div class="card-sub">Closed passes</div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">📅 Bookings Today</div>
+            <div class="card-value">{{ bookings_today }}</div>
+            <div class="card-sub">Total issued today</div>
+        </div>
+
+        <div class="card danger-card">
+            <div class="card-title">⛔ Blocked Students</div>
+            <div class="card-value">{{ blocked_students }}</div>
+            <div class="card-sub">Reached max violations</div>
         </div>
 
     </div>
@@ -67,7 +98,7 @@
            <tbody>
 {% for checkin in recent_checkins %}
 <tr class="activity-row"
-    data-location="{{ checkin.campus_resource.name|lower }}"
+    data-state="{% if checkin.defaulter %}defaulter{% elif checkin.current_step == 2 %}in_library{% elif checkin.current_step == 1 or checkin.current_step == 3 %}in_transit{% elif checkin.current_step == 4 %}completed{% else %}other{% endif %}"
     data-defaulter="{% if checkin.defaulter %}yes{% else %}no{% endif %}">
 
     <td>{{ checkin.user.student.name }}</td>
@@ -152,7 +183,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
             rows.forEach(row => {
 
-                const location = row.dataset.location;
+                const state = row.dataset.state;
                 const defaulter = row.dataset.defaulter;
 
                 let show = false;
@@ -164,7 +195,7 @@ document.addEventListener("DOMContentLoaded", function () {
                     show = (defaulter === "yes");
                 }
                 else {
-                    show = (location === filter);
+                    show = (state === filter);
                 }
 
                 row.style.display = show ? "" : "none";
@@ -175,11 +206,14 @@ document.addEventListener("DOMContentLoaded", function () {
             // SHOW NO-RESULT MESSAGE
             if (visibleCount === 0) {
 
-                if (filter === "library")
-                    noResults.textContent = "No Library check-ins";
+                if (filter === "in_library")
+                    noResults.textContent = "No students currently in library";
 
-                else if (filter === "hostel")
-                    noResults.textContent = "No Hostel check-ins";
+                else if (filter === "in_transit")
+                    noResults.textContent = "No students in transit";
+
+                else if (filter === "completed")
+                    noResults.textContent = "No completed passes";
 
                 else if (filter === "defaulter")
                     noResults.textContent = "No defaulters found";

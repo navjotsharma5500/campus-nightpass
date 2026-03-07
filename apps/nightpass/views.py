@@ -14,6 +14,17 @@ import random, string
 from .models import *
 from ..users.views import *
 from datetime import datetime, date, timedelta
+from .services.booking_service import create_pass_for_student
+
+
+def _is_within_booking_window(current_time, start_time, end_time):
+    if start_time <= end_time:
+        return start_time <= current_time <= end_time
+    return current_time >= start_time or current_time <= end_time
+
+
+def _format_booking_time(value):
+    return value.strftime("%I:%M %p").lstrip("0")
 
 
 @login_required
@@ -26,156 +37,45 @@ def campus_resources_home(request):
         user_incidents = NightPass.objects.filter(user=user, defaulter=True)
         
         if Settings.enable_hostel_timers:
-            checkin_timer = user.student.hostel.frontend_checkin_timer
+            frontend_timer = user.student.hostel.frontend_checkin_timer
+            backend_timer = user.student.hostel.backend_checkin_timer
         else:
-            checkin_timer = Settings.frontend_checkin_timer
+            frontend_timer = Settings.frontend_checkin_timer
+            backend_timer = Settings.backend_checkin_timer
+
+        transit_timer_minutes = frontend_timer
+        if user_pass and user_pass.current_step == 3:
+            transit_timer_minutes = backend_timer
+
+        if transit_timer_minutes is None:
+            transit_timer_minutes = 40
         announcement = Settings.announcement if Settings.announcement else False
-        return render(request, 'lmao.html', {'student':user.student,'campus_resources':campus_resources, 'user_pass':user_pass, 'user_incidents':user_incidents, 'frontend_checkin_timer':checkin_timer, 'announcement':announcement})	
+        return render(
+            request,
+            'lmao.html',
+            {
+                'student': user.student,
+                'campus_resources': campus_resources,
+                'user_pass': user_pass,
+                'user_incidents': user_incidents,
+                'frontend_checkin_timer': frontend_timer,
+                'backend_checkin_timer': backend_timer,
+                'transit_timer_minutes': int(transit_timer_minutes),
+                'announcement': announcement,
+            },
+        )	
     elif user.user_type == 'security':
         return redirect('/access')
     elif user.user_type == 'admin':
-        return redirect('/admin')
+        return redirect('/access/admin-dashboard')
 
 @csrf_exempt
 @login_required
 def generate_pass(request, campus_resource):
     user = request.user
     campus_resource = CampusResource.objects.get(name=campus_resource)
-    
-    if (campus_resource.is_display == False) or not campus_resource.is_booking:
-        data = {
-                'status':False,
-                'message':'Booking is currently not available for this resource.'
-                }
-        return HttpResponse(json.dumps(data))
-
-    if campus_resource.booking_complete:
-        data = {
-                'status':False,
-                'message':'All slots are booked for today!'
-                }
-        return HttpResponse(json.dumps(data))
-    
-    Settings = settings.objects.first()
-
-    if int(user.student.violation_flags) >= int(Settings.max_violation_count):
-        data = {
-                'status':False,
-                'message':'Nightpass facility has been temporarily suspended! Contact DOSA office for further details.'
-                }
-        return HttpResponse(json.dumps(data))
-
-    if Settings.enable_gender_ratio:
-        if user.student.gender == 'male':
-            male_pass_count = NightPass.objects.filter(valid=True, campus_resource=campus_resource,
-                                                        user__student__gender='male').count()
-            if (male_pass_count > Settings.male_ratio*(campus_resource.max_capacity)) or Settings.male_ratio==float(0):
-                data = {
-                'status':False,
-                'message':'All slots are booked for today!'
-                }
-                return HttpResponse(json.dumps(data))
-
-        elif user.student.gender == 'female':
-            female_pass_count = NightPass.objects.filter(valid=True, campus_resource=campus_resource, 
-                                                         user__student__gender='female').count()
-            if (female_pass_count > Settings.female_ratio*(campus_resource.max_capacity)) or Settings.female_ratio==float(0) :
-                data = {
-                'status':False,
-                'message':'All slots are booked for today!'
-                }
-                return HttpResponse(json.dumps(data))
-    
-    if Settings.enable_yearwise_limits:
-        data = {
-                'status':False,
-                'message':'All slots are booked for today!'
-                }
-        student_year = int(user.student.year)
-        if student_year == 1:
-            student_year_pass_count = NightPass.objects.filter(valid=True, campus_resource=campus_resource, 
-                                                         user__student__year='1').count()
-            if student_year_pass_count >= Settings.first_year:
-                return HttpResponse(json.dumps(data))
-        elif student_year == 2:
-            student_year_pass_count = NightPass.objects.filter(valid=True, campus_resource=campus_resource, 
-                                                         user__student__year='2').count()
-            if student_year_pass_count >= Settings.second_year:
-                return HttpResponse(json.dumps(data))
-        elif student_year == 3:
-            student_year_pass_count = NightPass.objects.filter(valid=True, campus_resource=campus_resource, 
-                                                         user__student__year='3').count()
-            if student_year_pass_count >= Settings.third_year:
-                return HttpResponse(json.dumps(data))
-        elif student_year == 4:
-            student_year_pass_count = NightPass.objects.filter(valid=True, campus_resource=campus_resource, 
-                                                         user__student__year='4').count()
-            if student_year_pass_count >= Settings.fourth_year:
-                return HttpResponse(json.dumps(data))
-            
-    if Settings.enable_hostel_limits:
-        student_hostel_pass_count = NightPass.objects.filter(valid=True, campus_resource=campus_resource, 
-                                                         user__student__hostel=user.student.hostel).count()
-        if student_hostel_pass_count >= user.student.hostel.max_students_allowed:
-            data = {
-                'status':False,
-                'message':'All slots are booked for today!'
-                }
-            return HttpResponse(json.dumps(data))
-
-
-    user_pass = NightPass.objects.filter(user=user, date=date.today()).first()
-    if not user_pass:
-        campus_resource.refresh_from_db()
-        if campus_resource.slots_booked < campus_resource.max_capacity:
-
-            resource_closing_time = campus_resource.end_time # From CampusResource model
-            pass_expiry = datetime.combine(date.today(), resource_closing_time)
-
-            while True:
-                pass_id = ''.join(random.choices(string.ascii_uppercase +
-                                    string.digits, k=16))
-
-                if not NightPass.objects.filter(pass_id=pass_id).count():
-                    break
-            generated_pass = NightPass(campus_resource=campus_resource, pass_id=pass_id, user=user , date=date.today(), start_time=datetime.now(), end_time=pass_expiry,valid=True)
-            generated_pass.save()
-
-            user.student.has_booked = True
-            campus_resource.slots_booked += 1
-            user.student.save()
-            campus_resource.save()
-            data = {
-                'pass_qr':None,
-                'status':True,
-                'message':f"Pass generated successfully for {campus_resource.name}!"
-            }
-            return HttpResponse(json.dumps(data))
-        else:
-            data={
-                'status':False,
-                'message':f"No more slots available for {campus_resource.name}!"
-            }
-            return HttpResponse(json.dumps(data))
-    elif user_pass.valid:
-        if user_pass.hostel_checkout_time:
-            data={
-                'status':False,
-                'message':f"New slot can be booked once you exit {user_pass.campus_resource}."
-            }
-            return HttpResponse(json.dumps(data))
-        else:
-            data={
-                    'status':False,
-                    'message':f"Cancel the booking for {user_pass.campus_resource} to book a new slot!"
-                }
-            return HttpResponse(json.dumps(data))
-    elif user_pass:
-        data={
-                'status':False,
-                'message':f"Pass already generated for today!"
-            }
-        return HttpResponse(json.dumps(data))
+    data = create_pass_for_student(user, campus_resource)
+    return HttpResponse(json.dumps(data))
 
 
 @csrf_exempt
@@ -222,7 +122,13 @@ def cancel_pass(request):
 def hostel_home(request):
     user = request.user
     if request.user.is_staff and user.user_type == 'security':
-        hostel_passes = NightPass.objects.filter(valid=True, user__student__hostel=request.user.security.hostel) | NightPass.objects.filter(date=date.today(), user__student__hostel=request.user.security.hostel).order_by('check_out')
+        security_profile = getattr(request.user, "security", None)
+        if not security_profile or security_profile.scanner_type != "HOSTEL" or not security_profile.hostel:
+            return redirect('/access')
+        hostel = security_profile.hostel
+        if not hostel:
+            return redirect('/access')
+        hostel_passes = NightPass.objects.filter(valid=True, user__student__hostel=hostel) | NightPass.objects.filter(date=date.today(), user__student__hostel=hostel).order_by('check_out')
         return render(request, 'caretaker.html', {'hostel_passes':hostel_passes})
     else:
         return redirect('/access')

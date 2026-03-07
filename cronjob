@@ -3,3 +3,4 @@
 21 7 * * * /usr/local/bin/python /app/manage.py reset_campus_resources >> /var/log/cron.log 2>&1
 21 7 * * * /usr/local/bin/python /app/manage.py stop_booking >> /var/log/cron.log 2>&1
 21 7 * * * /usr/local/bin/python /app/manage.py check_defaulters >> /var/log/cron.log 2>&1
+*/5 14-23 * * * /usr/local/bin/python /app/manage.py evaluate_pass_deadlines >> /var/log/cron.log 2>&1

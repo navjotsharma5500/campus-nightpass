@@ -14,6 +14,8 @@ from django.shortcuts import redirect
 
 from ..users.models import NightPass, Student
 from ..nightpass.models import CampusResource, Hostel
+from ..global_settings.models import Settings
+from .services.scan_service import process_scan, scanner_location_label, get_scan_window
 
 TRANSIT_LIMIT_MINUTES = 40
 
@@ -146,120 +148,8 @@ def checkin_to_hostel(student):
 @login_required
 def kiosk_extension(request):
     reg_no = request.POST.get('registration_number') or request.GET.get('registration_number')
-    if not reg_no:
-        return json_response({'status': False, 'message': 'Registration number missing.'})
-
-    try:
-        # Use select_related to get user and hostel data in one query
-        student = Student.objects.select_related('user', 'hostel').get(registration_number=reg_no)
-    except Student.DoesNotExist:
-        return json_response({'status': False, 'message': 'Student not found.'})
-
-    user_pass = NightPass.objects.filter(user=student.user, valid=True).first()
-    if not user_pass:
-        return json_response({'status': False, 'message': 'No active pass found for this student.'})
-
-    # Execute the step logic
-    # --- THE SKIP LOGIC ---
-# STEP SYSTEM
-
-    if user_pass.pass_type == "OUTSIDE":
-
-        if user_pass.current_step == 0:
-            # Skip hostel exit completely
-            user_pass.current_step = 1
-            user_pass.hostel_checkout_time = timezone.now()
-            user_pass.save()
-
-        if user_pass.current_step == 1:
-            response = checkin_to_location(user_pass, "Library")
-
-        elif user_pass.current_step == 2:
-            response = checkout_from_location(user_pass, "Library")
-
-        elif user_pass.current_step == 3:
-            response = checkin_to_hostel(student)
-
-        else:
-            return json_response({'status': False, 'message': 'Invalid OUTSIDE pass state.'})
-    else:  # HOSTEL PASS
-
-        if user_pass.current_step == 0:
-            response = checkout_from_hostel(user_pass)
-
-        elif user_pass.current_step == 1:
-            response = checkin_to_location(user_pass, "Library")
-
-        elif user_pass.current_step == 2:
-            response = checkout_from_location(user_pass, "Library")
-
-        elif user_pass.current_step == 3:
-            response = checkin_to_hostel(student)
-
-        else:
-            return json_response({'status': False, 'message': 'Invalid HOSTEL pass state.'})
-
-
-    # Convert the logic response to a dict so we can add student info to it
-    # This is the "Data Fetching" part your frontend is looking for
-    # Convert the logic response to a dict safely
-    try:
-        result = json.loads(response.content.decode('utf-8'))
-    except Exception:
-        result = {'status': False, 'message': 'Logic error'}
-    
-    if result.get('status'):
-        # Fix the Picture check
-        if student.picture and hasattr(student.picture, 'url'):
-            pic_url = student.picture.url
-        else:
-            pic_url = str(student.picture) if student.picture else "https://static.vecteezy.com/system/resources/previews/005/129/844/non_2x/profile-user-icon-isolated-on-white-background-eps10-free-vector.jpg"
-
-        # Use .pk instead of .id to avoid the AttributeError
-        result.update({
-            "user": {
-                "name": student.name,
-                "registration_number": student.registration_number,
-                "hostel": student.hostel.name if student.hostel else "N/A",
-                "picture": pic_url
-            },
-            "task": {"check_in": False, "check_out": False},
-            "user_pass": {"pass_id": user_pass.pk}  # Changed .id to .pk
-        })
-    
+    result = process_scan(reg_no, request.user)
     return json_response(result)
-    security = getattr(request.user, 'security', None)
-    if not security:
-        return json_response({'status': False, 'message': 'Security profile missing.'})
-
-    # STEP 0 → Leaving Hostel
-    if user_pass.current_step == 0:
-        checkout_from_hostel(user_pass)
-
-    # STEP 1 → Entering Campus Resource
-    elif user_pass.current_step == 1:
-        checkin_to_location(user_pass, "Library")
-
-    # STEP 2 → Leaving Campus Resource
-    elif user_pass.current_step == 2:
-        checkout_from_location(user_pass, "Library")
-
-    # STEP 3 → Returning to Hostel
-    elif user_pass.current_step == 3:
-        checkin_to_hostel(student)
-
-    # refresh data after step change
-    user_pass.refresh_from_db()
-
-    return json_response({
-        "status": True,
-        "message": "Scan Successful",
-        "student_name": student.name,
-        "registration_number": student.registration_number,
-        "current_step": user_pass.current_step,
-        "pass_id": user_pass.id,
-        "student_hostel": student.hostel.name if student.hostel else "-"
-    })
 
 # ---------------------------------------------------------
 # SCANNER PAGE
@@ -269,23 +159,24 @@ def kiosk_extension(request):
 def scanner(request):
 
     campus_resources = CampusResource.objects.filter(is_display=True)
-
+    scan_start, scan_end = get_scan_window()
+    scan_window_text = f"{scan_start.strftime('%I:%M %p').lstrip('0')} - {scan_end.strftime('%I:%M %p').lstrip('0')}"
     context = {
         'check_in_count': NightPass.objects.filter(
             current_step=2,
-            valid=True,
-            date=date.today()
+            valid=True
         ).count(),
 
         'total_count': NightPass.objects.filter(
-            valid=True,
-            date=date.today()
+            valid=True
         ).count(),
 
         'campus_resources': campus_resources,
         'user_incidents': NightPass.objects.filter(
             defaulter=True
-        ).order_by('-date')[:5]
+        ).order_by('-date')[:5],
+        'security_location': scanner_location_label(request.user),
+        'scan_window_text': scan_window_text,
     }
 
     return render(request, 'info.html', context)
@@ -298,19 +189,27 @@ def scanner(request):
 
 @user_passes_test(is_admin)
 def admin_dashboard(request):
+    today = date.today()
+    policy = Settings.objects.first()
 
     recent_checkins = NightPass.objects.select_related(
         "user__student", "campus_resource"
-    ).order_by("-start_time")[:10]
+    ).order_by("-date")[:12]
+
+    max_violations = int(policy.max_violation_count) if policy and policy.max_violation_count is not None else 3
 
     context = {
         "student_count": Student.objects.count(),
-
         "active_checkins": NightPass.objects.filter(
             current_step=2,
             valid=True
         ).count(),
-
+        "active_passes": NightPass.objects.filter(valid=True).count(),
+        "bookings_today": NightPass.objects.filter(date=today).count(),
+        "completed_today": NightPass.objects.filter(date=today, current_step=4).count(),
+        "in_transit": NightPass.objects.filter(valid=True, current_step__in=[1, 3]).count(),
+        "defaulters": NightPass.objects.filter(date=today, defaulter=True).count(),
+        "blocked_students": Student.objects.filter(violation_flags__gte=max_violations).count(),
         "recent_checkins": recent_checkins,
     }
 

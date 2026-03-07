@@ -4,5 +4,12 @@ from .models import CustomUser, Security
 
 @receiver(post_save, sender=CustomUser)
 def create_security_for_user(sender, instance, created, **kwargs):
-    if created:
-        Security.objects.create(user=instance)
+    if not created:
+        return
+    if instance.user_type != "security":
+        return
+
+    Security.objects.get_or_create(
+        user=instance,
+        defaults={"name": instance.email, "scanner_type": Security.SCANNER_LIBRARY},
+    )

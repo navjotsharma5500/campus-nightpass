@@ -16,6 +16,7 @@ from apps.nightpass.models import Hostel
 from .models import Student, NightPass, Security, Admin, CustomUser
 
 User = get_user_model()
+admin.site.index_template = "admin/index.html"
 
 
 # ==============================
@@ -251,8 +252,20 @@ class StudentAdmin(ImportExportModelAdmin):
 # ==============================
 
 class SecurityAdmin(admin.ModelAdmin):
-    list_display = ('name', 'admin_incharge', 'user')
+    list_display = ('name', 'scanner_type', 'hostel', 'admin_incharge', 'user')
+    list_filter = ('scanner_type', 'hostel', 'admin_incharge')
     autocomplete_fields = ('user',)
+    ordering = ('user__email',)
+    fields = ('name', 'scanner_type', 'hostel', 'admin_incharge', 'user')
+
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
+        return queryset.filter(user__user_type='security')
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == 'user':
+            kwargs['queryset'] = CustomUser.objects.filter(user_type='security')
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
 class AdminAdmin(admin.ModelAdmin):
