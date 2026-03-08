@@ -182,3 +182,64 @@
     font-size: 28px;
   }
 }
+
+/* Django admin list page layout: table center, filters right */
+@media (min-width: 1200px) {
+  .change-list #content-main {
+    margin-right: 0;
+    transition: margin-right 0.2s ease;
+  }
+
+  .np-filter-open.change-list #content-main {
+    margin-right: 320px;
+  }
+
+  .change-list #changelist-filter {
+    position: fixed;
+    right: 18px;
+    top: 165px;
+    width: 285px;
+    max-height: calc(100vh - 190px);
+    overflow: auto;
+    border-radius: 10px;
+    border: 1px solid #dbe5ef;
+    background: #fff;
+    box-shadow: 0 8px 22px rgba(13, 43, 83, 0.12);
+    z-index: 20;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+    transform: translateX(calc(100% + 24px));
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .np-filter-open.change-list #changelist-filter {
+    transform: translateX(0);
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .change-list #changelist-filter h2 {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+
+  .change-list #changelist {
+    width: 100%;
+  }
+
+  .np-filter-toggle {
+    position: fixed;
+    right: 18px;
+    top: 120px;
+    z-index: 30;
+    border: 1px solid #9cb8d5;
+    background: #fff;
+    color: #12385f;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(13, 43, 83, 0.12);
+  }
+}

@@ -10,81 +10,65 @@
 <div class="dashboard-wrapper">
 <div class="dashboard-container">
 
-    <!-- ===== TODAY SUMMARY HEADER ===== -->
     <div class="summary-header">
         <h2>
             CAMPUS LIBRARY NIGHT PASS
             <span>({% now "d M Y" %})</span>
         </h2>
-        <div class="filters">
-          <button class="filter active" data-filter="all">✔ All</button>
-          <button class="filter" data-filter="in_transit">🚌 In Transit</button>
-          <button class="filter" data-filter="in_library">📚 In Library</button>
-          <button class="filter" data-filter="completed">✅ Completed</button>
-          <button class="filter danger" data-filter="defaulter">🔴 Defaulters</button>
-        </div>
-
     </div>
 
 
-    <!-- ===== SUMMARY CARDS ===== -->
     <div class="summary-cards">
 
-        <div class="card">
+        <a href="{% url 'dashboard_detail' 'active-checkins' %}" class="card">
             <div class="card-title">🟢 Active Check-ins</div>
             <div class="card-value">{{ active_checkins }}</div>
             <div class="card-sub">Currently in library</div>
-        </div>
+        </a>
 
-        <div class="card">
-            <div class="card-title">🎓 Total Registered Students</div>
-            <div class="card-value">{{ student_count }}</div>
-            <div class="card-sub">Registered users</div>
-        </div>
-
-        <div class="card">
+        <a href="{% url 'dashboard_detail' 'active-passes' %}" class="card">
             <div class="card-title">📌 Active Passes</div>
             <div class="card-value">{{ active_passes }}</div>
             <div class="card-sub">Open journeys</div>
-        </div>
+        </a>
 
-        <div class="card danger-card">
-            <div class="card-title">🔴 Students Overdue</div>
-            <div class="card-value">{{ defaulters }}</div>
-            <div class="card-sub">Defaulters today</div>
-        </div>
+        <a href="{% url 'dashboard_detail' 'voilation' %}" class="card danger-card">
+            <div class="card-title">🔴 Students Voilation</div>
+            <div class="card-value">{{ violation_count }}</div>
+            <div class="card-sub">Violations today</div>
+        </a>
 
-        <div class="card">
+        <a href="{% url 'dashboard_detail' 'in-transit' %}" class="card">
             <div class="card-title">🚌 In Transit</div>
             <div class="card-value">{{ in_transit }}</div>
             <div class="card-sub">Between scan points</div>
-        </div>
+        </a>
 
-        <div class="card">
+        <a href="{% url 'dashboard_detail' 'completed-today' %}" class="card">
             <div class="card-title">✅ Completed Today</div>
             <div class="card-value">{{ completed_today }}</div>
             <div class="card-sub">Closed passes</div>
-        </div>
+        </a>
 
-        <div class="card">
-            <div class="card-title">📅 Bookings Today</div>
-            <div class="card-value">{{ bookings_today }}</div>
-            <div class="card-sub">Total issued today</div>
-        </div>
-
-        <div class="card danger-card">
+        <a href="{% url 'dashboard_detail' 'blocked-students' %}" class="card danger-card">
             <div class="card-title">⛔ Blocked Students</div>
             <div class="card-value">{{ blocked_students }}</div>
             <div class="card-sub">Reached max violations</div>
-        </div>
+        </a>
 
     </div>
 
 
-    <!-- ===== RECENT ACTIVITY ===== -->
     <div class="activity-section">
 
         <h3>RECENT ACTIVITY</h3>
+        <div class="filters in-activity">
+          <a class="filter {% if activity_tab == 'all' %}active{% endif %}" href="?activity=all">✔ All</a>
+          <a class="filter {% if activity_tab == 'in_transit' %}active{% endif %}" href="?activity=in_transit">🚌 In Transit</a>
+          <a class="filter {% if activity_tab == 'in_library' %}active{% endif %}" href="?activity=in_library">📚 In Library</a>
+          <a class="filter {% if activity_tab == 'complete' %}active{% endif %}" href="?activity=complete">✅ Complete</a>
+          <a class="filter danger {% if activity_tab == 'defaulters' %}active{% endif %}" href="?activity=defaulters">🔴 Defaulters</a>
+        </div>
 
         <table>
             <thead>
@@ -95,43 +79,32 @@
                     <th>Status</th>
                 </tr>
             </thead>
-           <tbody>
+            <tbody>
 {% for checkin in recent_checkins %}
-<tr class="activity-row"
-    data-state="{% if checkin.defaulter %}defaulter{% elif checkin.current_step == 2 %}in_library{% elif checkin.current_step == 1 or checkin.current_step == 3 %}in_transit{% elif checkin.current_step == 4 %}completed{% else %}other{% endif %}"
-    data-defaulter="{% if checkin.defaulter %}yes{% else %}no{% endif %}">
-
+<tr>
     <td>{{ checkin.user.student.name }}</td>
-    <td>{{ checkin.user.student.hostel.name }}</td>
-    <td>{{ checkin.start_time }}</td>
-
-    {% if checkin.defaulter %}
-        <td class="status red">● Overdue</td>
-    {% elif checkin.current_step == 2 %}
-        <td class="status green">● Checked In</td>
-    {% else %}
-        <td class="status">● Completed</td>
-    {% endif %}
+    <td>{% if checkin.user.student.hostel %}{{ checkin.user.student.hostel.name }}{% else %}-{% endif %}</td>
+    <td>{{ checkin.date }}</td>
+    <td class="status">● {{ checkin.dashboard_status }}</td>
 </tr>
 {% empty %}
 <tr>
-    <td colspan="4">No recent activity</td>
+    <td colspan="4">No recent activity for selected tab</td>
 </tr>
 {% endfor %}
-</tbody>
+            </tbody>
         </table>
-         <p id="no-results" style="display:none; text-align:center; padding:20px; color:#666;">
-          No results found
-         </p>
+        <div class="pagination-row">
+            {% if page_obj.has_previous %}
+                <a class="page-link" href="?activity={{ activity_tab }}&page={{ page_obj.previous_page_number }}">Prev</a>
+            {% endif %}
+            <span class="page-indicator">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+                <a class="page-link" href="?activity={{ activity_tab }}&page={{ page_obj.next_page_number }}">Next</a>
+            {% endif %}
+        </div>
 
-
-        <!-- ===== ACTION BUTTONS ===== -->
     <div class="action-buttons">
-
-    <a href="{% url 'simple_student_list' %}" class="primary-btn">
-        Manage Students
-    </a>
-
     <div class="export-section">
         <form method="GET" action="{% url 'download_report_range' %}" class="date-range-form">
 
@@ -161,77 +134,5 @@
     </div>
 </div>
 </div>
-
-<script>
-document.addEventListener("DOMContentLoaded", function () {
-
-    const buttons = document.querySelectorAll(".filter");
-    const rows = document.querySelectorAll(".activity-row");
-    const noResults = document.getElementById("no-results");
-
-    buttons.forEach(button => {
-
-        button.addEventListener("click", function () {
-
-            // Active button styling
-            buttons.forEach(btn => btn.classList.remove("active"));
-            button.classList.add("active");
-
-            const filter = button.dataset.filter;
-
-            let visibleCount = 0;
-
-            rows.forEach(row => {
-
-                const state = row.dataset.state;
-                const defaulter = row.dataset.defaulter;
-
-                let show = false;
-
-                if (filter === "all") {
-                    show = true;
-                }
-                else if (filter === "defaulter") {
-                    show = (defaulter === "yes");
-                }
-                else {
-                    show = (state === filter);
-                }
-
-                row.style.display = show ? "" : "none";
-
-                if (show) visibleCount++;
-            });
-
-            // SHOW NO-RESULT MESSAGE
-            if (visibleCount === 0) {
-
-                if (filter === "in_library")
-                    noResults.textContent = "No students currently in library";
-
-                else if (filter === "in_transit")
-                    noResults.textContent = "No students in transit";
-
-                else if (filter === "completed")
-                    noResults.textContent = "No completed passes";
-
-                else if (filter === "defaulter")
-                    noResults.textContent = "No defaulters found";
-
-                else
-                    noResults.textContent = "No results found";
-
-                noResults.style.display = "block";
-            } else {
-                noResults.style.display = "none";
-            }
-
-        });
-
-    });
-
-});
-</script>
-
 
 {% endblock %}

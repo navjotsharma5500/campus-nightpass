@@ -148,6 +148,10 @@ class NightPassAdmin(admin.ModelAdmin):
     export_as_xlsx.short_description = "Export Selected as XLSX"
     actions = ['export_as_xlsx']
 
+    class Media:
+        css = {"all": ("admin/custom_admin_dashboard.css",)}
+        js = ("admin/filter_toggle.js",)
+
 
 # ==============================
 # STUDENT IMPORT RESOURCE
@@ -246,6 +250,10 @@ class StudentAdmin(ImportExportModelAdmin):
 
     current_location.short_description = "Status"
 
+    class Media:
+        css = {"all": ("admin/custom_admin_dashboard.css",)}
+        js = ("admin/filter_toggle.js",)
+
 
 # ==============================
 # OTHER ADMINS
@@ -267,15 +275,27 @@ class SecurityAdmin(admin.ModelAdmin):
             kwargs['queryset'] = CustomUser.objects.filter(user_type='security')
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
+    class Media:
+        css = {"all": ("admin/custom_admin_dashboard.css",)}
+        js = ("admin/filter_toggle.js",)
+
 
 class AdminAdmin(admin.ModelAdmin):
     list_display = ('name', 'user', 'designation', 'department', "staff_id")
     autocomplete_fields = ('user',)
 
+    class Media:
+        css = {"all": ("admin/custom_admin_dashboard.css",)}
+        js = ("admin/filter_toggle.js",)
+
 
 class CustomUserAdmin(admin.ModelAdmin):
     list_display = ('email', 'user_type')
     search_fields = ('email',)
+
+    class Media:
+        css = {"all": ("admin/custom_admin_dashboard.css",)}
+        js = ("admin/filter_toggle.js",)
 
 
 # ==============================

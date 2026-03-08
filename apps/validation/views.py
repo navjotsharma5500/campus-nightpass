@@ -7,6 +7,9 @@ from django.contrib.auth.decorators import login_required, user_passes_test
 from django.utils import timezone
 from django.db.models import Count
 from django.db.models.functions import TruncDay, TruncMonth
+from django.core.paginator import Paginator
+from django.utils.dateparse import parse_date
+from django.db.models import Q
 from datetime import datetime, date, timedelta
 import json
 import requests
@@ -189,28 +192,70 @@ def scanner(request):
 
 @user_passes_test(is_admin)
 def admin_dashboard(request):
-    today = date.today()
+    today = timezone.localdate()
     policy = Settings.objects.first()
-
-    recent_checkins = NightPass.objects.select_related(
-        "user__student", "campus_resource"
-    ).order_by("-date")[:12]
-
     max_violations = int(policy.max_violation_count) if policy and policy.max_violation_count is not None else 3
 
+    today_passes = NightPass.objects.select_related(
+        "user__student", "campus_resource"
+    ).filter(date=today)
+
+    activity_tab = request.GET.get("activity", "all")
+    activity_qs = today_passes
+
+    if activity_tab == "in_transit":
+        activity_qs = activity_qs.filter(current_step__in=[1, 3])
+    elif activity_tab == "in_library":
+        activity_qs = activity_qs.filter(current_step=2)
+    elif activity_tab == "complete":
+        activity_qs = activity_qs.filter(current_step=4)
+    elif activity_tab == "defaulters":
+        activity_qs = activity_qs.filter(
+            Q(defaulter=True) | Q(user__student__violation_flags__gte=max_violations)
+        )
+
+    activity_qs = activity_qs.order_by(
+        "-hostel_checkin_time",
+        "-library_out_time",
+        "-library_in_time",
+        "-hostel_checkout_time",
+        "-pass_id",
+    )
+
+    paginator = Paginator(activity_qs, 10)
+    page_obj = paginator.get_page(request.GET.get("page", 1))
+
+    for pass_obj in page_obj.object_list:
+        if pass_obj.user.student.violation_flags >= max_violations:
+            pass_obj.dashboard_status = "Block"
+        elif pass_obj.defaulter:
+            pass_obj.dashboard_status = "Voilation"
+        elif pass_obj.current_step == 0:
+            pass_obj.dashboard_status = "Booked"
+        elif pass_obj.current_step == 1:
+            pass_obj.dashboard_status = "Hostel Out"
+        elif pass_obj.current_step == 2:
+            pass_obj.dashboard_status = "Library IN"
+        elif pass_obj.current_step == 3:
+            pass_obj.dashboard_status = "Library Out"
+        elif pass_obj.current_step == 4:
+            pass_obj.dashboard_status = "Hostel IN"
+        else:
+            pass_obj.dashboard_status = "Booked"
+
     context = {
-        "student_count": Student.objects.count(),
-        "active_checkins": NightPass.objects.filter(
+        "active_checkins": today_passes.filter(
             current_step=2,
             valid=True
         ).count(),
-        "active_passes": NightPass.objects.filter(valid=True).count(),
-        "bookings_today": NightPass.objects.filter(date=today).count(),
-        "completed_today": NightPass.objects.filter(date=today, current_step=4).count(),
-        "in_transit": NightPass.objects.filter(valid=True, current_step__in=[1, 3]).count(),
-        "defaulters": NightPass.objects.filter(date=today, defaulter=True).count(),
+        "active_passes": today_passes.filter(valid=True).count(),
+        "completed_today": today_passes.filter(current_step=4).count(),
+        "in_transit": today_passes.filter(valid=True, current_step__in=[1, 3]).count(),
+        "violation_count": today_passes.filter(defaulter=True).count(),
         "blocked_students": Student.objects.filter(violation_flags__gte=max_violations).count(),
-        "recent_checkins": recent_checkins,
+        "recent_checkins": page_obj.object_list,
+        "page_obj": page_obj,
+        "activity_tab": activity_tab,
     }
 
     return render(request, "nightpass/admin_dashboard.html", context)
@@ -223,9 +268,18 @@ def admin_dashboard(request):
 @user_passes_test(is_admin)
 def analytics(request):
 
-    last_30_days = date.today() - timedelta(days=30)
+    today = timezone.localdate()
+    default_from = today - timedelta(days=30)
+    from_date = parse_date(request.GET.get("from_date", ""))
+    to_date = parse_date(request.GET.get("to_date", ""))
 
-    daily_data = NightPass.objects.filter(date__gte=last_30_days) \
+    if not from_date or not to_date or from_date > to_date:
+        from_date = default_from
+        to_date = today
+
+    base_qs = NightPass.objects.filter(date__range=[from_date, to_date])
+
+    daily_data = base_qs \
         .annotate(day=TruncDay('date')) \
         .values('day') \
         .annotate(count=Count('pass_id')) \
@@ -234,7 +288,7 @@ def analytics(request):
     daily_labels = [d['day'].strftime("%d %b") for d in daily_data]
     daily_counts = [d['count'] for d in daily_data]
 
-    monthly_data = NightPass.objects.annotate(month=TruncMonth('date')) \
+    monthly_data = base_qs.annotate(month=TruncMonth('date')) \
         .values('month') \
         .annotate(count=Count('pass_id')) \
         .order_by('month')
@@ -244,14 +298,16 @@ def analytics(request):
 
     context = {
         'total_students': Student.objects.count(),
-        'total_passes': NightPass.objects.count(),
-        'active_passes': NightPass.objects.filter(valid=True).count(),
-        'completed_passes': NightPass.objects.filter(current_step=4).count(),
-        'defaulters': Student.objects.filter(violation_flags__gt=0).count(),
+        'total_passes': base_qs.count(),
+        'active_passes': base_qs.filter(valid=True).count(),
+        'completed_passes': base_qs.filter(current_step=4).count(),
+        'defaulters': base_qs.filter(defaulter=True).count(),
         'daily_labels': daily_labels,
         'daily_counts': daily_counts,
         'monthly_labels': monthly_labels,
         'monthly_counts': monthly_counts,
+        'from_date': from_date.isoformat(),
+        'to_date': to_date.isoformat(),
     }
 
     return render(request, "nightpass/analytics.html", context)
@@ -267,12 +323,6 @@ def simple_student_list(request):
     return render(request, "nightpass/simple_student_list.html", context)
 
 import openpyxl
-from django.http import HttpResponse
-
-
-import openpyxl
-from django.http import HttpResponse
-from django.utils.dateparse import parse_date
 from openpyxl.styles import Font
 
 
@@ -353,6 +403,50 @@ def download_report_range(request):
 
     workbook.save(response)
     return response
+
+
+@user_passes_test(is_admin)
+def dashboard_detail(request, segment):
+    today = timezone.localdate()
+    policy = Settings.objects.first()
+    max_violations = int(policy.max_violation_count) if policy and policy.max_violation_count is not None else 3
+
+    title = "Dashboard Details"
+    entries = []
+    students = []
+
+    passes_qs = NightPass.objects.select_related("user__student", "campus_resource").filter(date=today)
+
+    if segment == "active-checkins":
+        title = "Active Check IN"
+        entries = passes_qs.filter(valid=True, current_step=2)
+    elif segment == "active-passes":
+        title = "Active Passes"
+        entries = passes_qs.filter(valid=True)
+    elif segment == "voilation":
+        title = "Voilation"
+        entries = passes_qs.filter(defaulter=True)
+    elif segment == "in-transit":
+        title = "IN Transit"
+        entries = passes_qs.filter(valid=True, current_step__in=[1, 3])
+    elif segment == "completed-today":
+        title = "Complete Today"
+        entries = passes_qs.filter(current_step=4)
+    elif segment == "blocked-students":
+        title = "Blocked Students"
+        students = Student.objects.select_related("hostel").filter(violation_flags__gte=max_violations).order_by("-violation_flags", "name")
+
+    return render(
+        request,
+        "nightpass/dashboard_detail.html",
+        {
+            "title": title,
+            "segment": segment,
+            "entries": entries,
+            "students": students,
+            "max_violations": max_violations,
+        },
+    )
 
 from django.http import JsonResponse
 

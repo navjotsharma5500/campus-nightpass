@@ -8,10 +8,10 @@
 
 {% block content %}
 <div class="np-admin-shell">
-    <section class="np-admin-hero" id="fm-hero-fallback">
+    <section class="np-admin-hero">
         <div class="np-admin-kicker">Thapar NightPass</div>
-        <h1>Super Admin Control Center</h1>
-        <p>Monitor operations, open modules, and manage campus permissions from one place.</p>
+        <h1>Super Admin Dashboard</h1>
+        <p>Open modules from one place and manage platform operations.</p>
     </section>
 
     <section class="np-admin-grid">
@@ -61,35 +61,4 @@
         {% endif %}
     </section>
 </div>
-
-<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script src="https://unpkg.com/framer-motion/dist/framer-motion.js"></script>
-<script>
-  (function () {
-    if (!window.React || !window.ReactDOM || !window.framerMotion) return;
-    const rootEl = document.getElementById("fm-hero-fallback");
-    if (!rootEl) return;
-
-    const e = window.React.createElement;
-    const motion = window.framerMotion.motion;
-
-    function Hero() {
-      return e(
-        motion.section,
-        {
-          className: "np-admin-hero",
-          initial: { opacity: 0, y: 24 },
-          animate: { opacity: 1, y: 0 },
-          transition: { duration: 0.5, ease: "easeOut" }
-        },
-        e("div", { className: "np-admin-kicker" }, "Thapar NightPass"),
-        e("h1", null, "Super Admin Control Center"),
-        e("p", null, "Monitor operations, open modules, and manage campus permissions from one place.")
-      );
-    }
-
-    window.ReactDOM.createRoot(rootEl).render(e(Hero));
-  })();
-</script>
 {% endblock %}

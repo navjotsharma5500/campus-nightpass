@@ -6,6 +6,7 @@ from .views import (
     kiosk_extension,
     admin_dashboard,
     analytics,
+    dashboard_detail,
 )
 
 urlpatterns = [
@@ -51,5 +52,10 @@ urlpatterns = [
     "download-report-range/",
     views.download_report_range,
     name="download_report_range"
+    ),
+    path(
+        "admin-dashboard/details/<slug:segment>/",
+        dashboard_detail,
+        name="dashboard_detail",
     ),
 ]

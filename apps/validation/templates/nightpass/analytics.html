@@ -15,6 +15,8 @@ body { background: #f8fafc; }
     justify-content: space-between;
     align-items: center;
     margin-bottom: 40px;
+    flex-wrap: wrap;
+    gap: 12px;
 }
 
 .title {
@@ -54,6 +56,38 @@ body { background: #f8fafc; }
     color: white;
     text-decoration: none;
     border-radius: 6px;
+}
+
+.range-form {
+    display: flex;
+    align-items: end;
+    gap: 10px;
+    background: #ffffff;
+    border: 1px solid #d9e2f2;
+    border-radius: 10px;
+    padding: 10px;
+}
+
+.range-form .field {
+    display: flex;
+    flex-direction: column;
+    font-size: 12px;
+    color: #334155;
+}
+
+.range-form input {
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 6px 8px;
+}
+
+.range-form button {
+    border: none;
+    border-radius: 8px;
+    background: #1e293b;
+    color: #fff;
+    padding: 8px 12px;
+    cursor: pointer;
 }
 
 
@@ -159,6 +193,17 @@ body {
 
     <div class="top-bar">
         <div class="title">📊 NightPass Analytics Control Center</div>
+        <form method="GET" class="range-form">
+            <div class="field">
+                <label>From Date</label>
+                <input type="date" name="from_date" value="{{ from_date }}">
+            </div>
+            <div class="field">
+                <label>To Date</label>
+                <input type="date" name="to_date" value="{{ to_date }}">
+            </div>
+            <button type="submit">Apply</button>
+        </form>
 
         <a href="{% url 'admin_dashboard' %}" class="back-btn">
             <span class="arrow">←</span>
