@@ -166,6 +166,7 @@ def scanner(request):
     scan_window_text = f"{scan_start.strftime('%I:%M %p').lstrip('0')} - {scan_end.strftime('%I:%M %p').lstrip('0')}"
     context = {
         'check_in_count': NightPass.objects.filter(
+            date=today,
             current_step=2,
             valid=True
         ).count(),
