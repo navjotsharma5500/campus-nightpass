@@ -5,6 +5,7 @@ class Settings(models.Model):
     enable_hostel_limits = models.BooleanField(default=False, help_text="Limit the number of students eligible for a particular hostel. Limit can be set from Hostel profile.")
     enable_hostel_timers = models.BooleanField(default=False, help_text="Enabling activates the time limits specified in the Hostel profile. The timers below, however, will not be operational.")
     frontend_checkin_timer = models.IntegerField(blank=True, null=True, default=0)
+    library_timer_for_hostel_out = models.IntegerField(blank=True, null=True, default=0)
     backend_checkin_timer = models.IntegerField(blank=True, null=True, default=0)
     scan_start_time = models.TimeField(blank=True, null=True, help_text="Scanner start time window.")
     scan_end_time = models.TimeField(blank=True, null=True, help_text="Scanner end time window.")

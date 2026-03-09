@@ -1,0 +1,57 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block extrastyle %}
+{{ block.super }}
+<link rel="stylesheet" href="{% static 'admin/custom_admin_dashboard.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="np-admin-shell">
+    <section class="np-admin-hero">
+        <div class="np-admin-kicker">Thapar NightPass</div>
+        <h1>{{ title }}</h1>
+        <p><a href="/admin/">Back to Superuser Dashboard</a></p>
+    </section>
+
+    <section class="np-admin-panels">
+        <div class="np-app-panel">
+            <div class="np-panel-head">
+                <h2>{{ title }}</h2>
+            </div>
+            <table class="dashboard">
+                <thead>
+                    <tr>
+                        <th>Student</th>
+                        <th>Registration</th>
+                        <th>Hostel</th>
+                        <th>{% if mode == "violations" %}Violation Count{% else %}Defaulter Records{% endif %}</th>
+                        <th>Open</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for student in students %}
+                    <tr>
+                        <td>{{ student.name }}</td>
+                        <td>{{ student.registration_number }}</td>
+                        <td>{% if student.hostel %}{{ student.hostel.name }}{% else %}-{% endif %}</td>
+                        <td>{% if mode == "violations" %}{{ student.violation_flags }}{% else %}{{ student.defaulter_count }}{% endif %}</td>
+                        <td>
+                            {% if mode == "violations" %}
+                            <a href="{% url 'superuser_violation_detail' student.registration_number %}">View History</a>
+                            {% else %}
+                            <a href="{% url 'superuser_defaulter_detail' student.registration_number %}">View History</a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5">No records found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+{% endblock %}

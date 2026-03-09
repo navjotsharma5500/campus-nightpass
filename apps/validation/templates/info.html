@@ -48,6 +48,24 @@
         
         .roll-no { width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 6px; font-size: 16px; }
         .action-button { width: 100%; padding: 12px; background: #eb1b23; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        .student-list-card { max-width: 1200px; margin: 0 auto 30px auto; padding: 0 20px; }
+        .student-list-shell { background: white; border-radius: 12px; padding: 22px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        .student-list-head { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:16px; }
+        .student-list-head h3 { margin:0; color:#eb1b23; }
+        .student-list-head p { margin:0; font-size:13px; color:#666; }
+        .hostel-group { margin-top: 20px; }
+        .hostel-group h4 { margin: 0 0 10px 0; color:#222; border-bottom:1px solid #eee; padding-bottom:8px; }
+        .scanner-table-wrap { overflow-x:auto; }
+        .scanner-table { width:100%; border-collapse:collapse; font-size:13px; }
+        .scanner-table th, .scanner-table td { padding:10px 8px; border-bottom:1px solid #eee; text-align:left; vertical-align:top; }
+        .scanner-table th { background:#fafafa; color:#444; font-size:12px; text-transform:uppercase; letter-spacing:0.03em; }
+        .status-pill { display:inline-block; padding:4px 10px; border-radius:999px; background:#f3f4f6; font-weight:600; }
+        .status-pill.violation { background:#fee2e2; color:#991b1b; }
+        .status-pill.in-progress { background:#fff7ed; color:#9a3412; }
+        .status-pill.complete { background:#dcfce7; color:#166534; }
+        .pagination-row { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:18px; }
+        .page-link { color:#eb1b23; text-decoration:none; font-weight:600; }
+        .muted { color:#777; font-size:12px; }
 
         @media (max-width: 900px) { .main-layout { grid-template-columns: 1fr; } .main-card { grid-template-columns: 1fr; } }
     </style>
@@ -91,6 +109,133 @@
     </div>
 </div>
 
+<div class="student-list-card">
+    <div class="student-list-shell">
+        <div class="student-list-head">
+            <div>
+                <h3>
+                    {% if scanner_view == "hostel" %}
+                    Hostel Student List
+                    {% else %}
+                    Library Student List
+                    {% endif %}
+                </h3>
+                <p>
+                    {% if scanner_view == "hostel" %}
+                    Students are grouped hostel-wise for the current page.
+                    {% else %}
+                    All night pass students across hostels for today.
+                    {% endif %}
+                </p>
+            </div>
+            <div class="muted">10 students per page</div>
+        </div>
+
+        {% if scanner_view == "hostel" %}
+            {% for hostel_name, hostel_passes in grouped_student_passes.items %}
+            <div class="hostel-group">
+                <h4>{{ hostel_name }}</h4>
+                <div class="scanner-table-wrap">
+                    <table class="scanner-table">
+                        <thead>
+                            <tr>
+                                <th>Student</th>
+                                <th>Registration</th>
+                                <th>Pass Type</th>
+                                <th>Status</th>
+                                <th>Applied</th>
+                                <th>Hostel OUT</th>
+                                <th>Library IN</th>
+                                <th>Library OUT</th>
+                                <th>Hostel IN</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in hostel_passes %}
+                            <tr>
+                                <td>{{ row.user.student.name }}</td>
+                                <td>{{ row.user.student.registration_number }}</td>
+                                <td>{{ row.pass_type_label }}</td>
+                                <td>
+                                    <span class="status-pill {% if row.defaulter %}violation{% elif row.current_step == 4 %}complete{% else %}in-progress{% endif %}">
+                                        {{ row.scanner_status }}
+                                    </span>
+                                </td>
+                                <td>{{ row.start_time|time:"H:i:s" }}</td>
+                                <td>{{ row.hostel_checkout_time|date:"H:i:s"|default:"-" }}</td>
+                                <td>{{ row.library_in_time|date:"H:i:s"|default:"-" }}</td>
+                                <td>{{ row.library_out_time|date:"H:i:s"|default:"-" }}</td>
+                                <td>{{ row.hostel_checkin_time|date:"H:i:s"|default:"-" }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% empty %}
+            <p class="muted">No students found for today.</p>
+            {% endfor %}
+        {% else %}
+        <div class="scanner-table-wrap">
+            <table class="scanner-table">
+                <thead>
+                    <tr>
+                        <th>Student</th>
+                        <th>Registration</th>
+                        <th>Hostel</th>
+                        <th>Pass Type</th>
+                        <th>Status</th>
+                        <th>Applied</th>
+                        <th>Hostel OUT</th>
+                        <th>Library IN</th>
+                        <th>Library OUT</th>
+                        <th>Hostel IN</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in student_passes %}
+                    <tr>
+                        <td>{{ row.user.student.name }}</td>
+                        <td>{{ row.user.student.registration_number }}</td>
+                        <td>{% if row.user.student.hostel %}{{ row.user.student.hostel.name }}{% else %}-{% endif %}</td>
+                        <td>{{ row.pass_type_label }}</td>
+                        <td>
+                            <span class="status-pill {% if row.defaulter %}violation{% elif row.current_step == 4 %}complete{% else %}in-progress{% endif %}">
+                                {{ row.scanner_status }}
+                            </span>
+                        </td>
+                        <td>{{ row.start_time|time:"H:i:s" }}</td>
+                        <td>{{ row.hostel_checkout_time|date:"H:i:s"|default:"-" }}</td>
+                        <td>{{ row.library_in_time|date:"H:i:s"|default:"-" }}</td>
+                        <td>{{ row.library_out_time|date:"H:i:s"|default:"-" }}</td>
+                        <td>{{ row.hostel_checkin_time|date:"H:i:s"|default:"-" }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="10">No students found for today.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+
+        <div class="pagination-row">
+            <div>
+                {% if student_page.has_previous %}
+                <a class="page-link" href="?page={{ student_page.previous_page_number }}">Prev</a>
+                {% endif %}
+            </div>
+            <div class="muted">Page {{ student_page.number }} of {{ student_page.paginator.num_pages }}</div>
+            <div>
+                {% if student_page.has_next %}
+                <a class="page-link" href="?page={{ student_page.next_page_number }}">Next</a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
     let scanCooldown = false;
     let invalidCodeCooldown = false;
@@ -99,7 +244,7 @@
     scanCooldown = true;
     setTimeout(() => {
         scanCooldown = false;
-    }, 5000); // 5 seconds
+    }, 2000);
 }
 
     function showInvalidCodeToast() {
@@ -188,6 +333,9 @@
             return;
         }
         toastr.success(data.message);
+        if (data.violation_occurred) {
+            toastr.warning(data.violation_message || "Violation Occurred for Late Scan");
+        }
 
         clearTimeout(resetTimer);
         const user = data.user;

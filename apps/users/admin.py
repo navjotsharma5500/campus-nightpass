@@ -1,4 +1,6 @@
 from django.contrib import admin
+from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
+from django.contrib.auth.forms import UserChangeForm, UserCreationForm
 from django.http import HttpResponse
 from django.utils import timezone
 from django.utils.html import format_html
@@ -259,6 +261,18 @@ class StudentAdmin(ImportExportModelAdmin):
 # OTHER ADMINS
 # ==============================
 
+class CustomUserCreationForm(UserCreationForm):
+    class Meta(UserCreationForm.Meta):
+        model = CustomUser
+        fields = ("email", "user_type")
+
+
+class CustomUserChangeForm(UserChangeForm):
+    class Meta:
+        model = CustomUser
+        fields = ("email", "user_type", "is_active", "is_staff", "is_superuser", "groups", "user_permissions")
+
+
 class SecurityAdmin(admin.ModelAdmin):
     list_display = ('name', 'scanner_type', 'hostel', 'admin_incharge', 'user')
     list_filter = ('scanner_type', 'hostel', 'admin_incharge')
@@ -289,9 +303,28 @@ class AdminAdmin(admin.ModelAdmin):
         js = ("admin/filter_toggle.js",)
 
 
-class CustomUserAdmin(admin.ModelAdmin):
-    list_display = ('email', 'user_type')
+class CustomUserAdmin(DjangoUserAdmin):
+    form = CustomUserChangeForm
+    add_form = CustomUserCreationForm
+    list_display = ('email', 'user_type', 'is_active', 'is_staff')
     search_fields = ('email',)
+    ordering = ('email',)
+    list_filter = ('user_type', 'is_active', 'is_staff')
+    fieldsets = (
+        (None, {'fields': ('email', 'password')}),
+        ('Permissions', {'fields': ('user_type', 'is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
+        ('Important dates', {'fields': ('last_login',)}),
+    )
+    add_fieldsets = (
+        (
+            None,
+            {
+                'classes': ('wide',),
+                'fields': ('email', 'user_type', 'password1', 'password2', 'is_active'),
+            },
+        ),
+    )
+    filter_horizontal = ('groups', 'user_permissions')
 
     class Media:
         css = {"all": ("admin/custom_admin_dashboard.css",)}

@@ -7,4 +7,8 @@ urlpatterns = [
 
     path('accounts/google/login/', gauth),
     path('accounts/google/login/callback/', oauth_callback),
+    path('superuser/violations/', superuser_violations, name='superuser_violations'),
+    path('superuser/violations/<str:registration_number>/', superuser_violation_detail, name='superuser_violation_detail'),
+    path('superuser/defaulters/', superuser_defaulters, name='superuser_defaulters'),
+    path('superuser/defaulters/<str:registration_number>/', superuser_defaulter_detail, name='superuser_defaulter_detail'),
 ]

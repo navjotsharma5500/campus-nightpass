@@ -62,7 +62,9 @@ class CustomUser(AbstractUser):
     def save(self, *args, **kwargs):
         if self.user_type == 'security':
             self.is_staff = True
+            self.is_superuser = False
         elif self.user_type == 'admin':
+            self.is_staff = True
             self.is_superuser = True
         super().save(*args, **kwargs)
 
@@ -162,6 +164,8 @@ class NightPass(models.Model):
     valid = models.BooleanField(default=True)
     defaulter = models.BooleanField(default=False, blank=True, null=True)
     defaulter_remarks = models.TextField(blank=True, null=True)
+    violation_code = models.CharField(max_length=255, blank=True, null=True)
+    violation_time = models.DateTimeField(blank=True, null=True)
 
     class Meta:
         ordering = ('-date',)

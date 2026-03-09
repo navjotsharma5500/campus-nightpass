@@ -42,9 +42,12 @@ def campus_resources_home(request):
         else:
             frontend_timer = Settings.frontend_checkin_timer
             backend_timer = Settings.backend_checkin_timer
+        hostel_out_library_timer = Settings.library_timer_for_hostel_out or 40
 
         transit_timer_minutes = frontend_timer
-        if user_pass and user_pass.current_step == 3:
+        if user_pass and user_pass.current_step == 1 and user_pass.pass_type == "OUTSIDE":
+            transit_timer_minutes = hostel_out_library_timer
+        elif user_pass and user_pass.current_step == 3:
             transit_timer_minutes = backend_timer
 
         if transit_timer_minutes is None:
@@ -59,6 +62,7 @@ def campus_resources_home(request):
                 'user_pass': user_pass,
                 'user_incidents': user_incidents,
                 'frontend_checkin_timer': frontend_timer,
+                'hostel_out_library_timer': hostel_out_library_timer,
                 'backend_checkin_timer': backend_timer,
                 'transit_timer_minutes': int(transit_timer_minutes),
                 'announcement': announcement,
@@ -121,14 +125,15 @@ def cancel_pass(request):
 
 def hostel_home(request):
     user = request.user
-    if request.user.is_staff and user.user_type == 'security':
+    if user.user_type == 'security':
         security_profile = getattr(request.user, "security", None)
-        if not security_profile or security_profile.scanner_type != "HOSTEL" or not security_profile.hostel:
+        if not security_profile or security_profile.scanner_type != "HOSTEL":
             return redirect('/access')
         hostel = security_profile.hostel
-        if not hostel:
-            return redirect('/access')
-        hostel_passes = NightPass.objects.filter(valid=True, user__student__hostel=hostel) | NightPass.objects.filter(date=date.today(), user__student__hostel=hostel).order_by('check_out')
+        if hostel:
+            hostel_passes = NightPass.objects.filter(valid=True, user__student__hostel=hostel) | NightPass.objects.filter(date=date.today(), user__student__hostel=hostel).order_by('check_out')
+        else:
+            hostel_passes = NightPass.objects.filter(valid=True) | NightPass.objects.filter(date=date.today()).order_by('check_out')
         return render(request, 'caretaker.html', {'hostel_passes':hostel_passes})
     else:
         return redirect('/access')

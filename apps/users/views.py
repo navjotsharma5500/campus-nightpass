@@ -4,12 +4,16 @@ from django.views.decorators.csrf import csrf_exempt
 from django.contrib import messages
 from django.views import View
 from django.http import HttpResponse, HttpResponseRedirect
+from django.contrib.auth.decorators import user_passes_test
+from django.db.models import Count, Q
+from django.shortcuts import get_object_or_404
 from .models import Student, CustomUser
 from .google_config import config
 from django.http import JsonResponse
 import requests
 from urllib.parse import urlencode
 import json
+from .services.violation_utils import violation_codes
 
 
 def get_post_login_redirect(user):
@@ -18,6 +22,10 @@ def get_post_login_redirect(user):
     if getattr(user, 'user_type', None) == 'security':
         return '/access'
     return '/'
+
+
+def is_super_admin(user):
+    return user.is_superuser
 
 
 def gauth(request):
@@ -183,4 +191,70 @@ def update_user_image(request):
         else:
             return JsonResponse({'status': False,
                                  'message':'Student with the given registration number not found'})
+
+
+@user_passes_test(is_super_admin)
+def superuser_violations(request):
+    students = Student.objects.select_related("hostel").filter(violation_flags__gt=0).order_by("-violation_flags", "name")
+    return render(
+        request,
+        "admin/superuser_student_list.html",
+        {
+            "title": "Violations",
+            "mode": "violations",
+            "students": students,
+        },
+    )
+
+
+@user_passes_test(is_super_admin)
+def superuser_violation_detail(request, registration_number):
+    student = get_object_or_404(Student.objects.select_related("hostel"), registration_number=registration_number)
+    records = student.user.nightpass_set.filter(defaulter=True).order_by("-violation_time", "-date", "-start_time")
+    for record in records:
+        record.violation_codes_display = ", ".join(violation_codes(record)) or "-"
+    return render(
+        request,
+        "admin/superuser_student_detail.html",
+        {
+            "title": f"Violation History: {student.name}",
+            "mode": "violations",
+            "student": student,
+            "records": records,
+        },
+    )
+
+
+@user_passes_test(is_super_admin)
+def superuser_defaulters(request):
+    students = Student.objects.select_related("hostel").annotate(
+        defaulter_count=Count("user__nightpass", filter=Q(user__nightpass__defaulter=True), distinct=True)
+    ).filter(defaulter_count__gt=0).order_by("-defaulter_count", "name")
+    return render(
+        request,
+        "admin/superuser_student_list.html",
+        {
+            "title": "Defaulters",
+            "mode": "defaulters",
+            "students": students,
+        },
+    )
+
+
+@user_passes_test(is_super_admin)
+def superuser_defaulter_detail(request, registration_number):
+    student = get_object_or_404(Student.objects.select_related("hostel"), registration_number=registration_number)
+    records = student.user.nightpass_set.filter(defaulter=True).order_by("-violation_time", "-date", "-start_time")
+    for record in records:
+        record.violation_codes_display = ", ".join(violation_codes(record)) or "-"
+    return render(
+        request,
+        "admin/superuser_student_detail.html",
+        {
+            "title": f"Defaulter History: {student.name}",
+            "mode": "defaulters",
+            "student": student,
+            "records": records,
+        },
+    )
         

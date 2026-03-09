@@ -1,5 +1,5 @@
 {% extends "admin/base_site.html" %}
-{% load i18n static %}
+{% load i18n static admin_dashboard_tags %}
 
 {% block extrastyle %}
 {{ block.super }}
@@ -28,6 +28,56 @@
             <p class="value">Live</p>
         </article>
     </section>
+
+    {% if user.is_superuser %}
+    {% top_violation_students 6 as violation_students %}
+    {% top_defaulter_students 6 as defaulter_students %}
+    <section class="np-admin-panels">
+        <div class="np-app-panel">
+            <div class="np-panel-head">
+                <h2>Violations</h2>
+                <a href="{% url 'superuser_violations' %}">Open</a>
+            </div>
+            <div class="np-model-grid">
+                {% for student in violation_students %}
+                <div class="np-model-card">
+                    <h3>{{ student.name }}</h3>
+                    <p>{{ student.registration_number }} | {{ student.violation_flags }} violations</p>
+                    <div class="np-actions">
+                        <a class="btn ghost" href="{% url 'superuser_violation_detail' student.registration_number %}">History</a>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="np-model-card">
+                    <h3>No violations</h3>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="np-app-panel">
+            <div class="np-panel-head">
+                <h2>Defaulters</h2>
+                <a href="{% url 'superuser_defaulters' %}">Open</a>
+            </div>
+            <div class="np-model-grid">
+                {% for student in defaulter_students %}
+                <div class="np-model-card">
+                    <h3>{{ student.name }}</h3>
+                    <p>{{ student.registration_number }} | {{ student.defaulter_count }} records</p>
+                    <div class="np-actions">
+                        <a class="btn ghost" href="{% url 'superuser_defaulter_detail' student.registration_number %}">History</a>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="np-model-card">
+                    <h3>No defaulters</h3>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+    {% endif %}
 
     <section class="np-admin-panels">
         {% if app_list %}

@@ -1,0 +1,66 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block extrastyle %}
+{{ block.super }}
+<link rel="stylesheet" href="{% static 'admin/custom_admin_dashboard.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="np-admin-shell">
+    <section class="np-admin-hero">
+        <div class="np-admin-kicker">Thapar NightPass</div>
+        <h1>{{ title }}</h1>
+        <p>{{ student.registration_number }}{% if student.hostel %} | {{ student.hostel.name }}{% endif %}</p>
+        <p>
+            {% if mode == "violations" %}
+            <a href="{% url 'superuser_violations' %}">Back to Violations</a>
+            {% else %}
+            <a href="{% url 'superuser_defaulters' %}">Back to Defaulters</a>
+            {% endif %}
+        </p>
+    </section>
+
+    <section class="np-admin-panels">
+        <div class="np-app-panel">
+            <div class="np-panel-head">
+                <h2>History</h2>
+            </div>
+            <table class="dashboard">
+                <thead>
+                    <tr>
+                        <th>Violation Type</th>
+                        <th>Date</th>
+                        <th>Reason</th>
+                        <th>Booking Time</th>
+                        <th>Hostel OUT</th>
+                        <th>Library IN</th>
+                        <th>Library OUT</th>
+                        <th>Hostel IN</th>
+                        <th>Violation Time</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for record in records %}
+                    <tr>
+                        <td>{{ record.violation_codes_display }}</td>
+                        <td>{{ record.date }}</td>
+                        <td>{{ record.defaulter_remarks|default:"-" }}</td>
+                        <td>{{ record.start_time|time:"H:i:s" }}</td>
+                        <td>{{ record.hostel_checkout_time|date:"d M Y H:i:s"|default:"-" }}</td>
+                        <td>{{ record.library_in_time|date:"d M Y H:i:s"|default:"-" }}</td>
+                        <td>{{ record.library_out_time|date:"d M Y H:i:s"|default:"-" }}</td>
+                        <td>{{ record.hostel_checkin_time|date:"d M Y H:i:s"|default:"-" }}</td>
+                        <td>{{ record.violation_time|date:"d M Y H:i:s"|default:"-" }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="9">No history found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+{% endblock %}

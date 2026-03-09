@@ -45,6 +45,13 @@
             <th>Hostel</th>
             <th>Pass Date</th>
             <th>Step</th>
+            <th>Booking Time</th>
+            <th>Hostel OUT</th>
+            <th>Library IN</th>
+            <th>Library OUT</th>
+            <th>Hostel IN</th>
+            <th>Violation Time</th>
+            <th>Violation Type</th>
             <th>Violation</th>
           </tr>
         </thead>
@@ -54,11 +61,18 @@
             <td>{{ row.user.student.name }}</td>
             <td>{% if row.user.student.hostel %}{{ row.user.student.hostel.name }}{% else %}-{% endif %}</td>
             <td>{{ row.date }}</td>
-            <td>{{ row.current_step }}</td>
+            <td>{{ row.dashboard_status }}</td>
+            <td>{{ row.start_time|time:"H:i:s" }}</td>
+            <td>{{ row.hostel_checkout_time|date:"d M Y H:i:s"|default:"-" }}</td>
+            <td>{{ row.library_in_time|date:"d M Y H:i:s"|default:"-" }}</td>
+            <td>{{ row.library_out_time|date:"d M Y H:i:s"|default:"-" }}</td>
+            <td>{{ row.hostel_checkin_time|date:"d M Y H:i:s"|default:"-" }}</td>
+            <td>{{ row.violation_time|date:"d M Y H:i:s"|default:"-" }}</td>
+            <td>{{ row.violation_codes_display }}</td>
             <td>{% if row.defaulter %}Yes{% else %}No{% endif %}</td>
           </tr>
           {% empty %}
-          <tr><td colspan="5">No data found</td></tr>
+          <tr><td colspan="12">No data found</td></tr>
           {% endfor %}
         </tbody>
       </table>

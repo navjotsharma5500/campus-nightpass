@@ -2,6 +2,7 @@ from datetime import datetime, time, timedelta
 from django.utils import timezone
 
 from ...global_settings.models import Settings
+from ...users.services.violation_utils import append_violation
 
 
 STEP_LABELS = {
@@ -13,6 +14,7 @@ STEP_LABELS = {
 
 DEFAULT_TRANSIT_LIMIT_MINUTES = 40
 OUTSIDE_LIBRARY_IN_START = time(20, 0)
+DEFAULT_HOSTEL_OUT_LIBRARY_TIMER_MINUTES = 40
 
 
 def required_location(user_pass):
@@ -59,10 +61,12 @@ def _resolve_transit_timers(student, now=None):
     policy = _resolve_active_policy(current_date=timezone.localdate(now))
 
     frontend_timer = None
+    hostel_out_library_timer = None
     backend_timer = None
 
     if policy:
         frontend_timer = policy.frontend_checkin_timer
+        hostel_out_library_timer = policy.library_timer_for_hostel_out
         backend_timer = policy.backend_checkin_timer
 
         if policy.enable_hostel_timers and student.hostel:
@@ -74,17 +78,18 @@ def _resolve_transit_timers(student, now=None):
                 backend_timer = hostel_backend
 
     frontend_timer = int(frontend_timer) if frontend_timer is not None else DEFAULT_TRANSIT_LIMIT_MINUTES
-    backend_timer = int(backend_timer) if backend_timer is not None else DEFAULT_TRANSIT_LIMIT_MINUTES
-    return frontend_timer, backend_timer
-
-
-def _mark_violation(user_pass, student, remark):
-    user_pass.defaulter = True
-    user_pass.defaulter_remarks = (
-        f"{user_pass.defaulter_remarks} | {remark}"
-        if user_pass.defaulter_remarks else remark
+    hostel_out_library_timer = (
+        int(hostel_out_library_timer or DEFAULT_HOSTEL_OUT_LIBRARY_TIMER_MINUTES)
     )
-    student.violation_flags += 1
+    backend_timer = int(backend_timer) if backend_timer is not None else DEFAULT_TRANSIT_LIMIT_MINUTES
+    return frontend_timer, hostel_out_library_timer, backend_timer
+
+
+def _mark_violation(user_pass, student, code, remark, occurred_at=None):
+    added = append_violation(user_pass, code, remark, occurred_at=occurred_at)
+    if added:
+        student.violation_flags += 1
+    return added
 
 
 def _outside_library_in_start(user_pass):
@@ -117,23 +122,46 @@ def transition_checkin_to_library(user_pass):
 
     now = timezone.now()
     student = user_pass.user.student
-    frontend_timer, _ = _resolve_transit_timers(student, now=now)
+    frontend_timer, hostel_out_library_timer, _ = _resolve_transit_timers(student, now=now)
 
     transit_start = user_pass.hostel_checkout_time
+    allowed_minutes = frontend_timer
     if user_pass.pass_type == "OUTSIDE":
         transit_start = _outside_library_in_start(user_pass)
+        allowed_minutes = hostel_out_library_timer
 
+    violation_occurred = False
     if transit_start:
         transit = now - transit_start
-        if transit > timedelta(minutes=frontend_timer):
-            _mark_violation(user_pass, student, f"Violation: Library IN Late ({transit.seconds // 60} mins)")
-            student.save(update_fields=["violation_flags"])
+        if transit > timedelta(minutes=allowed_minutes):
+            violation_occurred = _mark_violation(
+                user_pass,
+                student,
+                "LATE_LIBRARY_IN",
+                f"Violation: Library IN Late ({transit.seconds // 60} mins)",
+                occurred_at=now,
+            )
+            if violation_occurred:
+                student.save(update_fields=["violation_flags"])
 
     user_pass.library_in_time = now
     user_pass.current_step = 2
-    user_pass.save(update_fields=["library_in_time", "current_step", "defaulter", "defaulter_remarks"])
+    user_pass.save(
+        update_fields=[
+            "library_in_time",
+            "current_step",
+            "defaulter",
+            "defaulter_remarks",
+            "violation_code",
+            "violation_time",
+        ]
+    )
 
-    return {"status": True, "reason_code": "TRANSITION_APPLIED", "message": "Checked into Library."}
+    payload = {"status": True, "reason_code": "TRANSITION_APPLIED", "message": "Checked into Library."}
+    if violation_occurred:
+        payload["violation_occurred"] = True
+        payload["violation_message"] = "Violation Occurred for Late Scan"
+    return payload
 
 
 def transition_checkout_from_library(user_pass):
@@ -155,12 +183,19 @@ def transition_checkin_to_hostel(student):
         return {"status": False, "reason_code": "INVALID_TRANSITION", "message": "Must exit library first."}
 
     now = timezone.now()
-    _, backend_timer = _resolve_transit_timers(student, now=now)
+    _, _, backend_timer = _resolve_transit_timers(student, now=now)
 
+    violation_occurred = False
     if user_pass.library_out_time:
         transit = now - user_pass.library_out_time
         if transit > timedelta(minutes=backend_timer):
-            _mark_violation(user_pass, student, f"Late return ({transit.seconds // 60} mins)")
+            violation_occurred = _mark_violation(
+                user_pass,
+                student,
+                "LATE_HOSTEL_IN",
+                f"Late return ({transit.seconds // 60} mins)",
+                occurred_at=now,
+            )
 
     student.is_checked_in = True
     student.hostel_checkin_time = now
@@ -177,7 +212,13 @@ def transition_checkin_to_hostel(student):
             "valid",
             "defaulter",
             "defaulter_remarks",
+            "violation_code",
+            "violation_time",
         ]
     )
 
-    return {"status": True, "reason_code": "TRANSITION_APPLIED", "message": "Hostel Entry Success. Pass Closed."}
+    payload = {"status": True, "reason_code": "TRANSITION_APPLIED", "message": "Hostel Entry Success. Pass Closed."}
+    if violation_occurred:
+        payload["violation_occurred"] = True
+        payload["violation_message"] = "Violation Occurred for Late Scan"
+    return payload

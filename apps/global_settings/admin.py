@@ -1,4 +1,6 @@
 from django.contrib import admin
+from django.http import HttpResponseRedirect
+from django.urls import reverse
 from .models import Settings
 from ..nightpass.models import CampusResource
 from ..users.models import Student, NightPass
@@ -60,5 +62,13 @@ class SettingsAdmin(ExtraButtonsMixin, admin.ModelAdmin):
         evaluate_active_pass_deadlines()
         self.message_user(request, "Successfully executed: Evaluate pass deadlines")
         return HttpResponseRedirectToReferrer(request)
+
+    @button(html_attrs={'style': 'background-color:#dbeafe;color:black'})
+    def violations(self, request):
+        return HttpResponseRedirect(reverse("superuser_violations"))
+
+    @button(html_attrs={'style': 'background-color:#fee2e2;color:black'})
+    def defaulters(self, request):
+        return HttpResponseRedirect(reverse("superuser_defaulters"))
 # Register your models here.
 admin.site.register(Settings, SettingsAdmin)

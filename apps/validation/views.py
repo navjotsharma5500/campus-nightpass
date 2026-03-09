@@ -14,8 +14,10 @@ from datetime import datetime, date, timedelta
 import json
 import requests
 from django.shortcuts import redirect
+from collections import OrderedDict
 
 from ..users.models import NightPass, Student
+from ..users.services.violation_utils import violation_codes
 from ..nightpass.models import CampusResource, Hostel
 from ..global_settings.models import Settings
 from .services.scan_service import process_scan, scanner_location_label, get_scan_window
@@ -32,7 +34,60 @@ def json_response(data):
 
 
 def is_admin(user):
-    return user.is_staff or user.is_superuser
+    return user.is_superuser or getattr(user, "user_type", None) == "admin"
+
+
+def is_scanner(user):
+    return getattr(user, "user_type", None) == "security"
+
+
+def _dashboard_step_label(user_pass):
+    mapping = {
+        0: "Booked",
+        1: "Hostel Out",
+        2: "Library IN",
+        3: "Library Out",
+        4: "Hostel IN",
+    }
+    return mapping.get(user_pass.current_step, "Booked")
+
+
+def _format_pass_for_dashboard(user_pass, max_violations):
+    student = user_pass.user.student
+    if student.violation_flags >= max_violations:
+        dashboard_status = "Block"
+    elif user_pass.defaulter:
+        dashboard_status = "Violation"
+    else:
+        dashboard_status = _dashboard_step_label(user_pass)
+
+    user_pass.dashboard_status = dashboard_status
+    user_pass.violation_codes_display = ", ".join(violation_codes(user_pass)) or "-"
+    return user_pass
+
+
+def _scanner_pass_type_label(user_pass):
+    return "Hostel Out" if user_pass.pass_type == "OUTSIDE" else "Library"
+
+
+def _scanner_status_label(user_pass):
+    if user_pass.defaulter:
+        return "Violation"
+
+    mapping = {
+        0: "Night Pass Approved",
+        1: "Hostel OUT",
+        2: "Library IN",
+        3: "Library OUT",
+        4: "Returned to Hostel",
+    }
+    return mapping.get(user_pass.current_step, "Night Pass Approved")
+
+
+def _format_pass_for_scanner(user_pass):
+    user_pass.pass_type_label = _scanner_pass_type_label(user_pass)
+    user_pass.scanner_status = _scanner_status_label(user_pass)
+    return user_pass
 
 
 # ---------------------------------------------------------
@@ -149,6 +204,7 @@ def checkin_to_hostel(student):
 # ---------------------------------------------------------
 @csrf_exempt
 @login_required
+@user_passes_test(is_scanner)
 def kiosk_extension(request):
     reg_no = request.POST.get('registration_number') or request.GET.get('registration_number')
     result = process_scan(reg_no, request.user)
@@ -159,11 +215,39 @@ def kiosk_extension(request):
 # ---------------------------------------------------------
 
 @login_required
+@user_passes_test(is_scanner)
 def scanner(request):
     today = timezone.localdate()
     campus_resources = CampusResource.objects.filter(is_display=True)
+    security_profile = getattr(request.user, "security", None)
     scan_start, scan_end = get_scan_window()
     scan_window_text = f"{scan_start.strftime('%I:%M %p').lstrip('0')} - {scan_end.strftime('%I:%M %p').lstrip('0')}"
+    student_passes = NightPass.objects.select_related(
+        "user__student",
+        "user__student__hostel",
+        "campus_resource",
+    ).filter(date=today).order_by(
+        "user__student__hostel__name",
+        "user__student__name",
+        "-start_time",
+    )
+
+    scanner_view = "library"
+    if security_profile and security_profile.scanner_type == "HOSTEL":
+        scanner_view = "hostel"
+        if security_profile.hostel_id:
+            student_passes = student_passes.filter(user__student__hostel_id=security_profile.hostel_id)
+
+    paginator = Paginator(student_passes, 10)
+    student_page = paginator.get_page(request.GET.get("page", 1))
+    page_passes = [_format_pass_for_scanner(user_pass) for user_pass in student_page.object_list]
+
+    grouped_passes = OrderedDict()
+    if scanner_view == "hostel":
+        for user_pass in page_passes:
+            hostel_name = user_pass.user.student.hostel.name if user_pass.user.student.hostel else "No Hostel Assigned"
+            grouped_passes.setdefault(hostel_name, []).append(user_pass)
+
     context = {
         'check_in_count': NightPass.objects.filter(
             date=today,
@@ -182,6 +266,10 @@ def scanner(request):
         ).order_by('-date')[:5],
         'security_location': scanner_location_label(request.user),
         'scan_window_text': scan_window_text,
+        'scanner_view': scanner_view,
+        'student_page': student_page,
+        'student_passes': page_passes,
+        'grouped_student_passes': grouped_passes,
     }
 
     return render(request, 'info.html', context)
@@ -227,23 +315,10 @@ def admin_dashboard(request):
     paginator = Paginator(activity_qs, 10)
     page_obj = paginator.get_page(request.GET.get("page", 1))
 
-    for pass_obj in page_obj.object_list:
-        if pass_obj.user.student.violation_flags >= max_violations:
-            pass_obj.dashboard_status = "Block"
-        elif pass_obj.defaulter:
-            pass_obj.dashboard_status = "Voilation"
-        elif pass_obj.current_step == 0:
-            pass_obj.dashboard_status = "Booked"
-        elif pass_obj.current_step == 1:
-            pass_obj.dashboard_status = "Hostel Out"
-        elif pass_obj.current_step == 2:
-            pass_obj.dashboard_status = "Library IN"
-        elif pass_obj.current_step == 3:
-            pass_obj.dashboard_status = "Library Out"
-        elif pass_obj.current_step == 4:
-            pass_obj.dashboard_status = "Hostel IN"
-        else:
-            pass_obj.dashboard_status = "Booked"
+    recent_checkins = [
+        _format_pass_for_dashboard(pass_obj, max_violations)
+        for pass_obj in page_obj.object_list
+    ]
 
     context = {
         "active_checkins": today_passes.filter(
@@ -255,7 +330,7 @@ def admin_dashboard(request):
         "in_transit": today_passes.filter(valid=True, current_step__in=[1, 3]).count(),
         "violation_count": today_passes.filter(defaulter=True).count(),
         "blocked_students": Student.objects.filter(violation_flags__gte=max_violations).count(),
-        "recent_checkins": page_obj.object_list,
+        "recent_checkins": recent_checkins,
         "page_obj": page_obj,
         "activity_tab": activity_tab,
     }
@@ -426,7 +501,7 @@ def dashboard_detail(request, segment):
         title = "Active Passes"
         entries = passes_qs.filter(valid=True)
     elif segment == "voilation":
-        title = "Voilation"
+        title = "Violation"
         entries = passes_qs.filter(defaulter=True)
     elif segment == "in-transit":
         title = "IN Transit"
@@ -437,6 +512,11 @@ def dashboard_detail(request, segment):
     elif segment == "blocked-students":
         title = "Blocked Students"
         students = Student.objects.select_related("hostel").filter(violation_flags__gte=max_violations).order_by("-violation_flags", "name")
+
+    entries = [
+        _format_pass_for_dashboard(entry, max_violations)
+        for entry in entries
+    ]
 
     return render(
         request,

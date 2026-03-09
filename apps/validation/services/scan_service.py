@@ -1,4 +1,5 @@
 from datetime import time
+from django.core.cache import cache
 from django.utils import timezone
 
 from ...users.models import NightPass, Student
@@ -15,6 +16,7 @@ from .lifecycle import (
 
 DEFAULT_SCAN_START_TIME = time(20, 0)
 DEFAULT_SCAN_END_TIME = time(22, 30)
+RECENT_SCAN_TTL_SECONDS = 300
 
 
 def _error(reason_code, message):
@@ -128,6 +130,13 @@ def process_scan(registration_number, user, now=None):
     if scanner_context["location"] == "HOSTEL" and scanner_context["hostel_id"] and student.hostel_id and scanner_context["hostel_id"] != student.hostel_id:
         return _error("WRONG_HOSTEL_SCANNER", "This student belongs to a different hostel scanner.")
 
+    recent_scan_key = f"recent-scan:{scanner_context['location']}:{student.registration_number}"
+    if cache.get(recent_scan_key):
+        return _error(
+            "RECENT_SCAN_BLOCKED",
+            "This ID was already scanned recently. Please wait 5 minutes before scanning again.",
+        )
+
     if user_pass.current_step == 0:
         result = transition_checkout_from_hostel(user_pass)
     elif user_pass.current_step == 1:
@@ -141,5 +150,6 @@ def process_scan(registration_number, user, now=None):
         return _error("INVALID_PASS_STATE", "Invalid pass state for scanning.")
 
     if result.get("status"):
+        cache.set(recent_scan_key, True, RECENT_SCAN_TTL_SECONDS)
         return _success_payload(student, user_pass, result)
     return result
