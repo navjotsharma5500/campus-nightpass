@@ -2,6 +2,7 @@ from django.shortcuts import render, HttpResponse, redirect
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import csrf_exempt
+from django.contrib import messages
 from django.utils import timezone
 from .models import *
 from ..users.models import *
@@ -33,6 +34,9 @@ def campus_resources_home(request):
     campus_resources = CampusResource.objects.filter(is_display=True)
     user = request.user
     if user.user_type == 'student':
+        if not hasattr(user, "student"):
+            messages.error(request, "Student profile is missing for this account. Please contact the administrator.")
+            return redirect('/logout')
         user_pass = NightPass.objects.filter(user=user, valid=True).first()
         user_incidents = NightPass.objects.filter(user=user, defaulter=True)
         

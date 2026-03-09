@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from django.contrib.auth.forms import UserChangeForm, UserCreationForm
+from django import forms
 from django.http import HttpResponse
 from django.utils import timezone
 from django.utils.html import format_html
@@ -208,6 +209,23 @@ class StudentResource(resources.ModelResource):
 
 class StudentAdmin(ImportExportModelAdmin):
     resource_class = StudentResource
+    class StudentAdminForm(forms.ModelForm):
+        user = forms.ModelChoiceField(
+            queryset=CustomUser.objects.filter(user_type='student'),
+            required=False,
+        )
+
+        class Meta:
+            model = Student
+            fields = "__all__"
+
+        def clean(self):
+            cleaned_data = super().clean()
+            if not cleaned_data.get("user") and not cleaned_data.get("email"):
+                raise forms.ValidationError("Provide either a linked student user or an email address.")
+            return cleaned_data
+
+    form = StudentAdminForm
 
     list_display = (
         'name',
@@ -225,6 +243,31 @@ class StudentAdmin(ImportExportModelAdmin):
     readonly_fields = ('last_checkout_time',)
 
     list_filter = ('hostel', YearWiseFilter, 'has_booked', 'violation_flags')
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == 'user':
+            kwargs['queryset'] = CustomUser.objects.filter(user_type='student')
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def save_model(self, request, obj, form, change):
+        linked_user = form.cleaned_data.get("user")
+        email = (form.cleaned_data.get("email") or "").strip()
+
+        if linked_user is None:
+            linked_user, _ = CustomUser.objects.get_or_create(
+                email=email,
+                defaults={"user_type": "student", "is_active": True},
+            )
+
+        if linked_user.user_type != "student":
+            linked_user.user_type = "student"
+            linked_user.save(update_fields=["user_type", "is_staff", "is_superuser"])
+
+        obj.user = linked_user
+        if not obj.email:
+            obj.email = linked_user.email
+
+        super().save_model(request, obj, form, change)
 
     def current_location(self, obj):
 
