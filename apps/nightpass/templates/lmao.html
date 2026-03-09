@@ -94,6 +94,8 @@
 {
     "registration_number": "{{ student.registration_number|default:'' }}",
     "current_step": {{ user_pass.current_step|default:-1 }},
+    "pass_type": "{{ user_pass.pass_type|default:'' }}",
+    "pass_date": "{{ user_pass.date|date:'Y-m-d'|default:'' }}",
     "hostel_checkout_time": "{{ user_pass.hostel_checkout_time|date:'c'|default:'' }}",
     "library_out_time": "{{ user_pass.library_out_time|date:'c'|default:'' }}",
     "transit_timer_minutes": {{ transit_timer_minutes|default:40 }}
@@ -195,6 +197,14 @@ setInterval(checkStatusUpdate, 5000);
 document.addEventListener("DOMContentLoaded", function () {
     const dataElement = document.getElementById("user-pass-data");
     const passData = dataElement ? JSON.parse(dataElement.textContent) : null;
+    const transitElement = document.getElementById("transit-timer");
+
+    function getOutsideLibraryStart(passDate) {
+        if (!passDate) {
+            return null;
+        }
+        return new Date(`${passDate}T20:00:00`);
+    }
 
     // Render Barcode
     if (passData && passData.registration_number) {
@@ -208,30 +218,44 @@ document.addEventListener("DOMContentLoaded", function () {
 
     // Logic for 40-Minute Transit Timer
     if (passData && (passData.current_step === 1 || passData.current_step === 3)) {
-        let transitStart = passData.current_step === 1 ? passData.hostel_checkout_time : passData.library_out_time;
-        if (transitStart) {
-            setInterval(function () {
-                let now = new Date().getTime();
-                let startTime = new Date(transitStart).getTime();
-                if (!isNaN(startTime)) {
-                    let timerMinutes = Number(passData.transit_timer_minutes || 40);
-                    let deadline = startTime + (timerMinutes * 60 * 1000); 
-                    let remaining = deadline - now;
-                    
-                    let transitElement = document.getElementById("transit-timer");
-                    if (transitElement) {
-                        if (remaining <= 0) {
-                            transitElement.innerHTML = "LATE: Incident Reported";
-                            transitElement.style.color = "red";
-                        } else {
-                            let mins = Math.floor(remaining / 60000);
-                            let secs = Math.floor((remaining % 60000) / 1000);
-                            transitElement.innerHTML = mins + "m " + secs + "s";
-                            transitElement.style.color = "#d9534f"; // Soft red/orange
-                        }
-                    }
+        let transitStart = null;
+        if (passData.current_step === 1 && passData.pass_type === "OUTSIDE") {
+            transitStart = getOutsideLibraryStart(passData.pass_date);
+        } else if (passData.current_step === 1) {
+            transitStart = passData.hostel_checkout_time ? new Date(passData.hostel_checkout_time) : null;
+        } else {
+            transitStart = passData.library_out_time ? new Date(passData.library_out_time) : null;
+        }
+
+        if (transitStart && !isNaN(transitStart.getTime()) && transitElement) {
+            const timerMinutes = Number(passData.transit_timer_minutes || 40);
+
+            function updateTransitTimer() {
+                const now = new Date();
+                const startTime = transitStart.getTime();
+                const deadline = startTime + (timerMinutes * 60 * 1000);
+
+                if (passData.current_step === 1 && passData.pass_type === "OUTSIDE" && now.getTime() < startTime) {
+                    transitElement.innerHTML = "Starts at 8:00 PM";
+                    transitElement.style.color = "#d9534f";
+                    return;
                 }
-            }, 1000);
+
+                const remaining = deadline - now.getTime();
+                if (remaining <= 0) {
+                    transitElement.innerHTML = "Violation: Library IN Late";
+                    transitElement.style.color = "red";
+                    return;
+                }
+
+                const mins = Math.floor(remaining / 60000);
+                const secs = Math.floor((remaining % 60000) / 1000);
+                transitElement.innerHTML = mins + "m " + secs + "s";
+                transitElement.style.color = "#d9534f";
+            }
+
+            updateTransitTimer();
+            setInterval(updateTransitTimer, 1000);
         }
     }
 });

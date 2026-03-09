@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 
 from django.db import transaction
 from django.utils import timezone
@@ -9,6 +9,7 @@ from ..models import NightPass
 
 MISSED_LIBRARY_IN = "MISSED_LIBRARY_IN"
 MISSED_HOSTEL_IN = "MISSED_HOSTEL_IN"
+OUTSIDE_LIBRARY_IN_START = time(20, 0)
 
 
 def _get_timers(student, policy):
@@ -37,7 +38,7 @@ def _append_defaulter_reason(user_pass, reason_code, human_message):
 
 
 def _outside_frontend_start(user_pass):
-    base_dt = datetime.combine(user_pass.date, user_pass.start_time)
+    base_dt = datetime.combine(user_pass.date, OUTSIDE_LIBRARY_IN_START)
     return timezone.make_aware(base_dt, timezone.get_current_timezone())
 
 
@@ -86,7 +87,7 @@ def evaluate_active_pass_deadlines(now=None):
             reason_added = _append_defaulter_reason(
                 user_pass,
                 MISSED_LIBRARY_IN,
-                "Required Library IN scan missed before deadline.",
+                "Violation: Library IN Late.",
             )
             if reason_added:
                 processed["missed_library_in"] += 1

@@ -1,6 +1,6 @@
 #models.py inside of user.py 
 
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.contrib.auth.base_user import BaseUserManager
@@ -190,7 +190,13 @@ class NightPass(models.Model):
         # ignore the step logic and show the Library message.
         if self.pass_type == 'OUTSIDE' or self.campus_resource.default_pass_type == 'OUTSIDE':
             if not self.library_in_time:
-                return "Please scan in library to activate"
+                start_at = timezone.make_aware(
+                    datetime.combine(self.date, time(20, 0)),
+                    timezone.get_current_timezone(),
+                )
+                if timezone.now() >= start_at:
+                    return "Library IN"
+                return "Library IN starts at 8:00 PM"
             if self.library_in_time and not self.library_out_time:
                 return f"Currently inside {self.campus_resource.name}"
             return "In Transit: Returning to Hostel"

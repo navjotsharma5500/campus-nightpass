@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 from django.utils import timezone
 
 from ...global_settings.models import Settings
@@ -12,6 +12,7 @@ STEP_LABELS = {
 }
 
 DEFAULT_TRANSIT_LIMIT_MINUTES = 40
+OUTSIDE_LIBRARY_IN_START = time(20, 0)
 
 
 def required_location(user_pass):
@@ -86,6 +87,13 @@ def _mark_violation(user_pass, student, remark):
     student.violation_flags += 1
 
 
+def _outside_library_in_start(user_pass):
+    return timezone.make_aware(
+        datetime.combine(user_pass.date, OUTSIDE_LIBRARY_IN_START),
+        timezone.get_current_timezone(),
+    )
+
+
 def transition_checkout_from_hostel(user_pass):
     if user_pass.current_step != 0:
         return {"status": False, "reason_code": "INVALID_TRANSITION", "message": "Invalid step for Hostel Exit."}
@@ -111,10 +119,14 @@ def transition_checkin_to_library(user_pass):
     student = user_pass.user.student
     frontend_timer, _ = _resolve_transit_timers(student, now=now)
 
-    if user_pass.hostel_checkout_time:
-        transit = now - user_pass.hostel_checkout_time
+    transit_start = user_pass.hostel_checkout_time
+    if user_pass.pass_type == "OUTSIDE":
+        transit_start = _outside_library_in_start(user_pass)
+
+    if transit_start:
+        transit = now - transit_start
         if transit > timedelta(minutes=frontend_timer):
-            _mark_violation(user_pass, student, f"Late arrival ({transit.seconds // 60} mins)")
+            _mark_violation(user_pass, student, f"Violation: Library IN Late ({transit.seconds // 60} mins)")
             student.save(update_fields=["violation_flags"])
 
     user_pass.library_in_time = now
