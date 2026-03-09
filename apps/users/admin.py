@@ -305,6 +305,18 @@ class StudentAdmin(ImportExportModelAdmin):
 # ==============================
 
 class CustomUserCreationForm(UserCreationForm):
+    scanner_type = forms.ChoiceField(
+        choices=Security.SCANNER_TYPE_CHOICES,
+        required=False,
+        initial=Security.SCANNER_LIBRARY,
+        help_text="Used only when creating a security user.",
+    )
+    hostel = forms.ModelChoiceField(
+        queryset=Hostel.objects.all(),
+        required=False,
+        help_text="Leave blank for a universal hostel scanner.",
+    )
+
     class Meta(UserCreationForm.Meta):
         model = CustomUser
         fields = ("email", "user_type")
@@ -323,9 +335,29 @@ class CustomUserCreationForm(UserCreationForm):
 
 
 class CustomUserChangeForm(UserChangeForm):
+    scanner_type = forms.ChoiceField(
+        choices=Security.SCANNER_TYPE_CHOICES,
+        required=False,
+        help_text="Used only for security users.",
+    )
+    hostel = forms.ModelChoiceField(
+        queryset=Hostel.objects.all(),
+        required=False,
+        help_text="Leave blank for a universal hostel scanner.",
+    )
+
     class Meta:
         model = CustomUser
         fields = ("email", "user_type", "is_active", "is_staff", "is_superuser", "groups", "user_permissions")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        security_profile = getattr(self.instance, "security", None) if self.instance.pk else None
+        if security_profile:
+            self.fields["scanner_type"].initial = security_profile.scanner_type
+            self.fields["hostel"].initial = security_profile.hostel
+        else:
+            self.fields["scanner_type"].initial = Security.SCANNER_LIBRARY
 
     def clean_user_type(self):
         user_type = self.cleaned_data["user_type"]
@@ -383,7 +415,7 @@ class CustomUserAdmin(DjangoUserAdmin):
             None,
             {
                 'classes': ('wide',),
-                'fields': ('email', 'user_type', 'password1', 'password2', 'is_active'),
+                'fields': ('email', 'user_type', 'scanner_type', 'hostel', 'password1', 'password2', 'is_active'),
             },
         ),
     )
@@ -392,6 +424,24 @@ class CustomUserAdmin(DjangoUserAdmin):
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
         return queryset.exclude(user_type='student')
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+
+        if obj.user_type != "security":
+            return
+
+        scanner_type = form.cleaned_data.get("scanner_type") or Security.SCANNER_LIBRARY
+        hostel = form.cleaned_data.get("hostel") if scanner_type == Security.SCANNER_HOSTEL else None
+
+        Security.objects.update_or_create(
+            user=obj,
+            defaults={
+                "name": getattr(obj, "security", None).name if hasattr(obj, "security") else obj.email,
+                "scanner_type": scanner_type,
+                "hostel": hostel,
+            },
+        )
 
     class Media:
         css = {"all": ("admin/custom_admin_dashboard.css",)}
