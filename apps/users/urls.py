@@ -11,4 +11,5 @@ urlpatterns = [
     path('superuser/violations/<str:registration_number>/', superuser_violation_detail, name='superuser_violation_detail'),
     path('superuser/defaulters/', superuser_defaulters, name='superuser_defaulters'),
     path('superuser/defaulters/<str:registration_number>/', superuser_defaulter_detail, name='superuser_defaulter_detail'),
+    path('superuser/students/<str:registration_number>/clear-record/', superuser_clear_student_record, name='superuser_clear_student_record'),
 ]

@@ -8,10 +8,12 @@ from django.contrib.auth.decorators import user_passes_test
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
 from .models import Student, CustomUser
+from .models import NightPass
 from .google_config import config
 from django.http import JsonResponse
 import requests
 from urllib.parse import urlencode
+from django.urls import reverse
 import json
 from .services.violation_utils import violation_codes
 
@@ -26,6 +28,17 @@ def get_post_login_redirect(user):
 
 def is_super_admin(user):
     return user.is_superuser
+
+
+def _student_search_queryset(queryset, search_term):
+    if not search_term:
+        return queryset
+    return queryset.filter(
+        Q(name__icontains=search_term)
+        | Q(registration_number__icontains=search_term)
+        | Q(email__icontains=search_term)
+        | Q(hostel__name__icontains=search_term)
+    )
 
 
 def gauth(request):
@@ -195,7 +208,9 @@ def update_user_image(request):
 
 @user_passes_test(is_super_admin)
 def superuser_violations(request):
-    students = Student.objects.select_related("hostel").filter(violation_flags__gt=0).order_by("-violation_flags", "name")
+    search_term = (request.GET.get("q") or "").strip()
+    students = Student.objects.select_related("hostel").filter(violation_flags__gt=0)
+    students = _student_search_queryset(students, search_term).order_by("-violation_flags", "name")
     return render(
         request,
         "admin/superuser_student_list.html",
@@ -203,6 +218,7 @@ def superuser_violations(request):
             "title": "Violations",
             "mode": "violations",
             "students": students,
+            "search_term": search_term,
         },
     )
 
@@ -227,9 +243,11 @@ def superuser_violation_detail(request, registration_number):
 
 @user_passes_test(is_super_admin)
 def superuser_defaulters(request):
+    search_term = (request.GET.get("q") or "").strip()
     students = Student.objects.select_related("hostel").annotate(
         defaulter_count=Count("user__nightpass", filter=Q(user__nightpass__defaulter=True), distinct=True)
-    ).filter(defaulter_count__gt=0).order_by("-defaulter_count", "name")
+    ).filter(defaulter_count__gt=0)
+    students = _student_search_queryset(students, search_term).order_by("-defaulter_count", "name")
     return render(
         request,
         "admin/superuser_student_list.html",
@@ -237,6 +255,7 @@ def superuser_defaulters(request):
             "title": "Defaulters",
             "mode": "defaulters",
             "students": students,
+            "search_term": search_term,
         },
     )
 
@@ -257,4 +276,24 @@ def superuser_defaulter_detail(request, registration_number):
             "records": records,
         },
     )
+
+
+@user_passes_test(is_super_admin)
+def superuser_clear_student_record(request, registration_number):
+    if request.method != "POST":
+        return redirect("/admin/")
+
+    student = get_object_or_404(Student, registration_number=registration_number)
+    NightPass.objects.filter(user=student.user).update(
+        defaulter=False,
+        defaulter_remarks="",
+        violation_code=None,
+        violation_time=None,
+    )
+    student.violation_flags = 0
+    student.save(update_fields=["violation_flags"])
+    messages.success(request, f"Cleared violation/defaulter record for {student.name}.")
+
+    next_url = request.POST.get("next") or reverse("superuser_violations")
+    return redirect(next_url)
         
