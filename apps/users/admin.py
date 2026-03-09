@@ -309,11 +309,31 @@ class CustomUserCreationForm(UserCreationForm):
         model = CustomUser
         fields = ("email", "user_type")
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["user_type"].choices = [
+            choice for choice in CustomUser.choices if choice[0] != "student"
+        ]
+
+    def clean_user_type(self):
+        user_type = self.cleaned_data["user_type"]
+        if user_type == "student":
+            raise forms.ValidationError("Create students from the Students section, not the Users section.")
+        return user_type
+
 
 class CustomUserChangeForm(UserChangeForm):
     class Meta:
         model = CustomUser
         fields = ("email", "user_type", "is_active", "is_staff", "is_superuser", "groups", "user_permissions")
+
+    def clean_user_type(self):
+        user_type = self.cleaned_data["user_type"]
+        if self.instance.pk and self.instance.user_type != "student":
+            return user_type
+        if user_type == "student":
+            raise forms.ValidationError("Student accounts must be managed from the Students section so the student profile is created.")
+        return user_type
 
 
 class SecurityAdmin(admin.ModelAdmin):
@@ -368,6 +388,10 @@ class CustomUserAdmin(DjangoUserAdmin):
         ),
     )
     filter_horizontal = ('groups', 'user_permissions')
+
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
+        return queryset.exclude(user_type='student')
 
     class Media:
         css = {"all": ("admin/custom_admin_dashboard.css",)}

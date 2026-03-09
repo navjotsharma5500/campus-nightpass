@@ -4,6 +4,12 @@
 {% block extrastyle %}
 {{ block.super }}
 <link rel="stylesheet" href="{% static 'admin/custom_admin_dashboard.css' %}">
+<style>
+  #content { background:#f4f7fb; min-height:calc(100vh - 90px); }
+  .np-admin-shell { max-width:1240px; margin:0 auto; padding:28px 22px 40px; color:#11233b; }
+  .np-admin-hero,.np-app-panel { border-radius:16px; background:#fff; padding:24px; box-shadow:0 10px 24px rgba(13,43,83,.06); }
+  .np-admin-hero { color:#fff; background:linear-gradient(135deg, #005f99, #0f6ecf 48%, #18a999); }
+</style>
 {% endblock %}
 
 {% block content %}
