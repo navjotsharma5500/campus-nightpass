@@ -160,7 +160,7 @@ def kiosk_extension(request):
 
 @login_required
 def scanner(request):
-
+    today = timezone.localdate()
     campus_resources = CampusResource.objects.filter(is_display=True)
     scan_start, scan_end = get_scan_window()
     scan_window_text = f"{scan_start.strftime('%I:%M %p').lstrip('0')} - {scan_end.strftime('%I:%M %p').lstrip('0')}"
@@ -171,6 +171,7 @@ def scanner(request):
         ).count(),
 
         'total_count': NightPass.objects.filter(
+            date=today,
             valid=True
         ).count(),
 
