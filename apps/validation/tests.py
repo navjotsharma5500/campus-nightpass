@@ -130,6 +130,21 @@ class AdminDashboardEnhancementTests(TestCase):
         self.assertContains(response, "STUDENT ACTIVITY TIMELINE")
         self.assertContains(response, "Today Student")
 
+    def test_blocked_students_count_not_limited_by_selected_date(self):
+        Settings.objects.create(max_violation_count=1)
+        self.student_old.violation_flags = 2
+        self.student_old.save(update_fields=["violation_flags"])
+
+        today = timezone.localdate()
+        self._create_pass(self.student_user_today, today)
+        old_day = today - timedelta(days=2)
+        self._create_pass(self.student_user_old, old_day)
+
+        response = self.client.get(reverse("admin_dashboard"), {"date": today.isoformat()})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["blocked_students"], 1)
+
 
 class ViolationThresholdBehaviorTests(TestCase):
     def setUp(self):

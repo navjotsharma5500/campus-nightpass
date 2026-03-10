@@ -3,6 +3,7 @@ from django.http import HttpResponseRedirect
 from django.urls import reverse
 from django.db import transaction
 from django.db.models import Count
+from urllib.parse import parse_qs, urlparse
 from .models import Settings
 from ..nightpass.models import CampusResource
 from ..users.models import Student, NightPass
@@ -76,11 +77,18 @@ class SettingsAdmin(ExtraButtonsMixin, admin.ModelAdmin):
     @button(
         html_attrs={
             'style': 'background-color:#fde68a;color:black',
-            'onclick': "const d=prompt('Enter date (YYYY-MM-DD). Leave blank for today.','');if(d!==null){window.location=this.href+'?normalize_date='+encodeURIComponent(d);}return false;",
+            'onclick': "const d=prompt('Enter date (YYYY-MM-DD). Leave blank for today.','');if(d===null){return false;}const u=new URL(this.href, window.location.origin);u.searchParams.set('normalize_date', d.trim());window.location=u.toString();return false;",
         }
     )
     def normalize_specific_date_violations(self, request):
-        raw_date = (request.GET.get("normalize_date") or "").strip()
+        raw_date = (
+            (request.GET.get("normalize_date") or "")
+            or (request.POST.get("normalize_date") or "")
+        ).strip()
+        if not raw_date:
+            referer = request.META.get("HTTP_REFERER") or ""
+            if referer:
+                raw_date = (parse_qs(urlparse(referer).query).get("normalize_date", [""])[0] or "").strip()
         target_date = date.today()
         if raw_date:
             parsed = None

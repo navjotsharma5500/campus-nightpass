@@ -5,10 +5,11 @@ from django.contrib import messages
 from django.views import View
 from django.http import HttpResponse, HttpResponseRedirect
 from django.contrib.auth.decorators import user_passes_test
-from django.db.models import Count, Q
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from .models import Student, CustomUser
 from .models import NightPass
+from ..global_settings.models import Settings
 from .google_config import config
 from django.http import JsonResponse
 import requests
@@ -244,16 +245,16 @@ def superuser_violation_detail(request, registration_number):
 @user_passes_test(is_super_admin)
 def superuser_defaulters(request):
     search_term = (request.GET.get("q") or "").strip()
-    students = Student.objects.select_related("hostel").annotate(
-        defaulter_count=Count("user__nightpass", filter=Q(user__nightpass__defaulter=True), distinct=True)
-    ).filter(defaulter_count__gt=0)
-    students = _student_search_queryset(students, search_term).order_by("-defaulter_count", "name")
+    policy = Settings.objects.first()
+    max_violations = int(policy.max_violation_count) if policy and policy.max_violation_count is not None else 3
+    students = Student.objects.select_related("hostel").filter(violation_flags__gte=max_violations)
+    students = _student_search_queryset(students, search_term).order_by("-violation_flags", "name")
     return render(
         request,
         "admin/superuser_student_list.html",
         {
-            "title": "Defaulters",
-            "mode": "defaulters",
+            "title": "Blocked Students",
+            "mode": "blocked",
             "students": students,
             "search_term": search_term,
         },
@@ -270,8 +271,8 @@ def superuser_defaulter_detail(request, registration_number):
         request,
         "admin/superuser_student_detail.html",
         {
-            "title": f"Defaulter History: {student.name}",
-            "mode": "defaulters",
+            "title": f"Blocked Student History: {student.name}",
+            "mode": "blocked",
             "student": student,
             "records": records,
         },

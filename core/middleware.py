@@ -1,5 +1,6 @@
 from django.shortcuts import redirect
 from django.core.cache import cache
+from django.db import OperationalError
 from django.utils import timezone
 
 class RedirectUserMiddleware:
@@ -10,11 +11,18 @@ class RedirectUserMiddleware:
         throttle_key = "nightpass:deadline-eval:last-run"
         now = timezone.now()
         last_run = cache.get(throttle_key)
-        if not last_run or (now - last_run).total_seconds() >= 60:
+        excluded_prefixes = ("/admin", "/static/", "/media/")
+        if (
+            not request.path.startswith(excluded_prefixes)
+            and (not last_run or (now - last_run).total_seconds() >= 60)
+        ):
             from apps.users.services.deadline_evaluator import evaluate_active_pass_deadlines
 
-            evaluate_active_pass_deadlines(now=now)
-            cache.set(throttle_key, now, 60)
+            try:
+                evaluate_active_pass_deadlines(now=now)
+                cache.set(throttle_key, now, 60)
+            except OperationalError:
+                pass
 
         # Make sure request.user exists safely
         user = getattr(request, "user", None)

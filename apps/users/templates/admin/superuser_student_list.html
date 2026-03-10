@@ -43,7 +43,7 @@
                         <th>Student</th>
                         <th>Registration</th>
                         <th>Hostel</th>
-                        <th>{% if mode == "violations" %}Violation Count{% else %}Defaulter Records{% endif %}</th>
+                        <th>{% if mode == "violations" %}Violation Count{% elif mode == "blocked" %}Violation Count{% else %}Defaulter Records{% endif %}</th>
                         <th>Open</th>
                         <th>Remove</th>
                     </tr>
@@ -54,10 +54,12 @@
                         <td>{{ student.name }}</td>
                         <td>{{ student.registration_number }}</td>
                         <td>{% if student.hostel %}{{ student.hostel.name }}{% else %}-{% endif %}</td>
-                        <td>{% if mode == "violations" %}{{ student.violation_flags }}{% else %}{{ student.defaulter_count }}{% endif %}</td>
+                        <td>{% if mode == "violations" or mode == "blocked" %}{{ student.violation_flags }}{% else %}{{ student.defaulter_count }}{% endif %}</td>
                         <td>
                             {% if mode == "violations" %}
                             <a href="{% url 'superuser_violation_detail' student.registration_number %}">View History</a>
+                            {% elif mode == "blocked" %}
+                            <a href="{% url 'superuser_defaulter_detail' student.registration_number %}">View History</a>
                             {% else %}
                             <a href="{% url 'superuser_defaulter_detail' student.registration_number %}">View History</a>
                             {% endif %}

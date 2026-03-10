@@ -51,7 +51,7 @@
 
     {% if user.is_superuser %}
     {% top_violation_students 6 as violation_students %}
-    {% top_defaulter_students 6 as defaulter_students %}
+    {% top_blocked_students 6 as blocked_students %}
     <section class="np-admin-panels">
         <div class="np-app-panel">
             <div class="np-panel-head">
@@ -77,21 +77,21 @@
 
         <div class="np-app-panel">
             <div class="np-panel-head">
-                <h2>Defaulters</h2>
+                <h2>Blocked</h2>
                 <a href="{% url 'superuser_defaulters' %}">Open</a>
             </div>
             <div class="np-model-grid">
-                {% for student in defaulter_students %}
+                {% for student in blocked_students %}
                 <div class="np-model-card">
                     <h3>{{ student.name }}</h3>
-                    <p>{{ student.registration_number }} | {{ student.defaulter_count }} records</p>
+                    <p>{{ student.registration_number }} | {{ student.violation_flags }} violations</p>
                     <div class="np-actions">
                         <a class="btn ghost" href="{% url 'superuser_defaulter_detail' student.registration_number %}">History</a>
                     </div>
                 </div>
                 {% empty %}
                 <div class="np-model-card">
-                    <h3>No defaulters</h3>
+                    <h3>No blocked students</h3>
                 </div>
                 {% endfor %}
             </div>

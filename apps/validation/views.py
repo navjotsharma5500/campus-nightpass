@@ -107,11 +107,10 @@ def _activity_queryset_for_date(selected_date):
     ).filter(date=selected_date)
 
 
-def _blocked_students_for_date(selected_date, max_violations):
+def _blocked_students_queryset(max_violations):
     return Student.objects.select_related("hostel").filter(
         violation_flags__gte=max_violations,
-        user__nightpass__date=selected_date,
-    ).distinct().order_by("-violation_flags", "name")
+    ).order_by("-violation_flags", "name")
 
 
 def _apply_activity_filter(queryset, activity_tab, max_violations):
@@ -398,7 +397,7 @@ def admin_dashboard(request):
         "completed_today": today_passes.filter(current_step=4).count(),
         "in_transit": today_passes.filter(valid=True, current_step__in=[1, 3]).count(),
         "violation_count": today_passes.filter(defaulter=True).count(),
-        "blocked_students": _blocked_students_for_date(selected_date, max_violations).count(),
+        "blocked_students": _blocked_students_queryset(max_violations).count(),
         "recent_checkins": recent_checkins,
         "page_obj": page_obj,
         "activity_tab": activity_tab,
@@ -583,7 +582,7 @@ def dashboard_detail(request, segment):
         entries = passes_qs.filter(current_step=4)
     elif segment == "blocked-students":
         title = "Blocked Students"
-        students = _blocked_students_for_date(selected_date, max_violations)
+        students = _blocked_students_queryset(max_violations)
 
     entries = [
         _format_pass_for_dashboard(entry, max_violations)
@@ -673,7 +672,7 @@ def download_admin_table_excel(request):
         elif segment == "completed-today":
             entries = passes_qs.filter(current_step=4)
         elif segment == "blocked-students":
-            students = _blocked_students_for_date(selected_date, max_violations)
+            students = _blocked_students_queryset(max_violations)
 
         if segment == "blocked-students":
             headers = ["Student", "Registration", "Hostel", "Violations"]
