@@ -13,44 +13,59 @@
     <div class="summary-header">
         <h2>
             CAMPUS LIBRARY NIGHT PASS
-            <span>({% now "d M Y" %})</span>
+            <span>({{ selected_date_display }})</span>
         </h2>
+        <div class="header-actions">
+            <form method="get" class="date-range-form">
+                <div class="date-group">
+                    <label>Date</label>
+                    <input type="date" name="date" value="{{ selected_date }}" required>
+                </div>
+                <input type="hidden" name="activity" value="{{ activity_tab }}">
+                {% if search_term %}<input type="hidden" name="q" value="{{ search_term }}">{% endif %}
+                {% if selected_student %}<input type="hidden" name="student" value="{{ selected_student.registration_number }}">{% endif %}
+                <button type="submit" class="secondary-btn">Apply</button>
+            </form>
+            <a href="{% url 'analytics' %}?from_date={{ selected_date }}&to_date={{ selected_date }}" class="secondary-btn">
+                View Analytics
+            </a>
+        </div>
     </div>
 
 
     <div class="summary-cards">
 
-        <a href="{% url 'dashboard_detail' 'active-checkins' %}" class="card">
+        <a href="{% url 'dashboard_detail' 'active-checkins' %}?date={{ selected_date }}" class="card">
             <div class="card-title">🟢 Active Check-ins</div>
             <div class="card-value">{{ active_checkins }}</div>
             <div class="card-sub">Currently in library</div>
         </a>
 
-        <a href="{% url 'dashboard_detail' 'active-passes' %}" class="card">
+        <a href="{% url 'dashboard_detail' 'active-passes' %}?date={{ selected_date }}" class="card">
             <div class="card-title">📌 Active Passes</div>
             <div class="card-value">{{ active_passes }}</div>
             <div class="card-sub">Open journeys</div>
         </a>
 
-        <a href="{% url 'dashboard_detail' 'voilation' %}" class="card danger-card">
+        <a href="{% url 'dashboard_detail' 'voilation' %}?date={{ selected_date }}" class="card danger-card">
             <div class="card-title">🔴 Students Violation</div>
             <div class="card-value">{{ violation_count }}</div>
             <div class="card-sub">Violations today</div>
         </a>
 
-        <a href="{% url 'dashboard_detail' 'in-transit' %}" class="card">
+        <a href="{% url 'dashboard_detail' 'in-transit' %}?date={{ selected_date }}" class="card">
             <div class="card-title">🚌 In Transit</div>
             <div class="card-value">{{ in_transit }}</div>
             <div class="card-sub">Between scan points</div>
         </a>
 
-        <a href="{% url 'dashboard_detail' 'completed-today' %}" class="card">
+        <a href="{% url 'dashboard_detail' 'completed-today' %}?date={{ selected_date }}" class="card">
             <div class="card-title">✅ Completed Today</div>
             <div class="card-value">{{ completed_today }}</div>
             <div class="card-sub">Closed passes</div>
         </a>
 
-        <a href="{% url 'dashboard_detail' 'blocked-students' %}" class="card danger-card">
+        <a href="{% url 'dashboard_detail' 'blocked-students' %}?date={{ selected_date }}" class="card danger-card">
             <div class="card-title">⛔ Blocked Students</div>
             <div class="card-value">{{ blocked_students }}</div>
             <div class="card-sub">Reached max violations</div>
@@ -63,11 +78,21 @@
 
         <h3>RECENT ACTIVITY</h3>
         <div class="filters in-activity">
-          <a class="filter {% if activity_tab == 'all' %}active{% endif %}" href="?activity=all">✔ All</a>
-          <a class="filter {% if activity_tab == 'in_transit' %}active{% endif %}" href="?activity=in_transit">🚌 In Transit</a>
-          <a class="filter {% if activity_tab == 'in_library' %}active{% endif %}" href="?activity=in_library">📚 In Library</a>
-          <a class="filter {% if activity_tab == 'complete' %}active{% endif %}" href="?activity=complete">✅ Complete</a>
-          <a class="filter danger {% if activity_tab == 'defaulters' %}active{% endif %}" href="?activity=defaulters">🔴 Defaulters</a>
+          <a class="filter {% if activity_tab == 'all' %}active{% endif %}" href="?date={{ selected_date }}&activity=all">✔ All</a>
+          <a class="filter {% if activity_tab == 'in_transit' %}active{% endif %}" href="?date={{ selected_date }}&activity=in_transit">🚌 In Transit</a>
+          <a class="filter {% if activity_tab == 'in_library' %}active{% endif %}" href="?date={{ selected_date }}&activity=in_library">📚 In Library</a>
+          <a class="filter {% if activity_tab == 'complete' %}active{% endif %}" href="?date={{ selected_date }}&activity=complete">✅ Complete</a>
+          <a class="filter danger {% if activity_tab == 'defaulters' %}active{% endif %}" href="?date={{ selected_date }}&activity=defaulters">🔴 Defaulters</a>
+        </div>
+
+        <div class="toolbar">
+            <form class="search-form" method="get">
+                <input type="hidden" name="date" value="{{ selected_date }}">
+                <input type="hidden" name="activity" value="{{ activity_tab }}">
+                <input type="text" name="q" value="{{ search_term }}" placeholder="Search by roll no, student name, or email">
+                <button type="submit" class="secondary-btn">Search Student</button>
+            </form>
+            <a class="secondary-btn" href="{% url 'download_admin_table_excel' %}?scope=activity&date={{ selected_date }}&activity={{ activity_tab }}">Download This Table</a>
         </div>
 
         <table>
@@ -108,40 +133,93 @@
         </table>
         <div class="pagination-row">
             {% if page_obj.has_previous %}
-                <a class="page-link" href="?activity={{ activity_tab }}&page={{ page_obj.previous_page_number }}">Prev</a>
+                <a class="page-link" href="?date={{ selected_date }}&activity={{ activity_tab }}&page={{ page_obj.previous_page_number }}">Prev</a>
             {% endif %}
             <span class="page-indicator">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
             {% if page_obj.has_next %}
-                <a class="page-link" href="?activity={{ activity_tab }}&page={{ page_obj.next_page_number }}">Next</a>
+                <a class="page-link" href="?date={{ selected_date }}&activity={{ activity_tab }}&page={{ page_obj.next_page_number }}">Next</a>
             {% endif %}
         </div>
 
-    <div class="action-buttons">
-    <div class="export-section">
-        <form method="GET" action="{% url 'download_report_range' %}" class="date-range-form">
+        {% if search_term %}
+        <div class="top-head">
+            <h3>SEARCH RESULTS</h3>
+            <a class="secondary-btn" href="{% url 'download_admin_table_excel' %}?scope=student_search&q={{ search_term }}">Download Results</a>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Student</th>
+                    <th>Registration</th>
+                    <th>Email</th>
+                    <th>Hostel</th>
+                    <th>Violations</th>
+                    <th>Open Activity</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for student in student_matches %}
+                <tr>
+                    <td>{{ student.name }}</td>
+                    <td>{{ student.registration_number }}</td>
+                    <td>{{ student.user.email }}</td>
+                    <td>{% if student.hostel %}{{ student.hostel.name }}{% else %}-{% endif %}</td>
+                    <td>{{ student.violation_flags }}</td>
+                    <td><a href="?date={{ selected_date }}&activity={{ activity_tab }}&q={{ search_term }}&student={{ student.registration_number }}">View Timeline</a></td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6">No students found</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
 
-            <div class="date-group">
-                <label>From</label>
-                <input type="date" name="start_date" required>
-            </div>
-
-            <div class="date-group">
-                <label>To</label>
-                <input type="date" name="end_date" required>
-            </div>
-
-            <button type="submit" class="secondary-btn">
-                Download Excel
-            </button>
-
-        </form>
-    </div>
-
-    <a href="{% url 'analytics' %}" class="secondary-btn">
-        View Analytics
-    </a>
-
-</div>
+        {% if selected_student %}
+        <div class="top-head">
+            <h3>STUDENT ACTIVITY TIMELINE: {{ selected_student.name }} ({{ selected_student.registration_number }})</h3>
+            <a class="secondary-btn" href="{% url 'download_admin_table_excel' %}?scope=student_activity&student={{ selected_student.registration_number }}">Download Timeline</a>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Pass Date</th>
+                    <th>Pass Type</th>
+                    <th>Resource</th>
+                    <th>Booking Time</th>
+                    <th>Hostel OUT</th>
+                    <th>Library IN</th>
+                    <th>Library OUT</th>
+                    <th>Hostel IN</th>
+                    <th>Transit Status</th>
+                    <th>Violation Time</th>
+                    <th>Violation Type</th>
+                    <th>Defaulter</th>
+                    <th>Blocked</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in student_timeline %}
+                <tr>
+                    <td>{{ row.date }}</td>
+                    <td>{{ row.pass_type }}</td>
+                    <td>{{ row.campus_resource.name }}</td>
+                    <td>{{ row.start_time|time:"H:i:s" }}</td>
+                    <td>{{ row.hostel_checkout_time|date:"d M Y H:i:s"|default:"-" }}</td>
+                    <td>{{ row.library_in_time|date:"d M Y H:i:s"|default:"-" }}</td>
+                    <td>{{ row.library_out_time|date:"d M Y H:i:s"|default:"-" }}</td>
+                    <td>{{ row.hostel_checkin_time|date:"d M Y H:i:s"|default:"-" }}</td>
+                    <td>{% if row.current_step == 1 or row.current_step == 3 %}In Transit{% else %}{{ row.dashboard_status }}{% endif %}</td>
+                    <td>{{ row.violation_time|date:"d M Y H:i:s"|default:"-" }}</td>
+                    <td>{{ row.violation_codes_display }}</td>
+                    <td>{% if row.defaulter %}Yes{% else %}No{% endif %}</td>
+                    <td>{% if blocked_on_selected %}Yes{% else %}No{% endif %}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="13">No activity found for this student</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
 
     </div>
 </div>

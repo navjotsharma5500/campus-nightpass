@@ -49,6 +49,12 @@
           transform: translateY(-2px);
         }
 
+        .actions {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 16px;
+        }
+
         .arrow {
           font-size: 16px;
         }
@@ -79,12 +85,19 @@
         .green { color: #0b814a; }
         .red { color: #ff4d4d; }
         .orange { color: orange; }
+        .footer-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 2100; background: #696b6d; padding: 8px 14px; box-sizing: border-box; display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #fff; }
+        .footer-link { color: #fff; text-decoration: none; background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.25); padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+        .footer-title { font-size: 16px; font-weight: 600; }
     </style>
 </head>
 <body>
 
 
-
+<div class="actions">
+    <a href="{% url 'download_admin_table_excel' %}?scope=students_all" class="back-btn">
+        Download Excel
+    </a>
+</div>
 <table>
     <tr>
         <th>Name</th>
@@ -141,6 +154,11 @@
     </tr>
     {% endfor %}
 </table>
+<div class="footer-bar">
+    <a class="footer-link" href="mailto:itmh@thapar.edu">Support</a>
+    <span class="footer-title">Campus Library Night Pass · TIET</span>
+    <a class="footer-link" href="{% url 'creators_page' %}">Creators</a>
+</div>
 
 </body>
 </html>

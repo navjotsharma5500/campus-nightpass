@@ -14,6 +14,29 @@
 <link rel="stylesheet" href="{% static 'nightpass/styles.css' %}">
 
 {% block extra_css %}{% endblock %}
+<style>
+.footer-bar{
+    width:100%;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+}
+.footer-link{
+    color:#fff;
+    text-decoration:none;
+    background:rgba(255,255,255,.18);
+    border:1px solid rgba(255,255,255,.25);
+    padding:6px 12px;
+    border-radius:999px;
+    font-size:12px;
+    font-weight:600;
+}
+.footer-title{
+    font-size:16px;
+    font-weight:600;
+}
+</style>
 
 </head>
 <body>
@@ -41,7 +64,11 @@
     {% endblock %}
 
    <footer>
-        Made in TIET by <a href="https://www.linkedin.com/in/aman-kapoor201/" target="_blank" style="text-decoration: underline; color: white;">Aman Kapoor</a> and <a href="https://www.linkedin.com/in/sagarikawankhede/" target="_blank" style="text-decoration: underline; color: white;">Sagarika Wankhede</a> 
+        <div class="footer-bar">
+            <a class="footer-link" href="mailto:itmh@thapar.edu">Support</a>
+            <span class="footer-title">Campus Library Night Pass · TIET</span>
+            <a class="footer-link" href="{% url 'creators_page' %}">Creators</a>
+        </div>
     </footer>
 
 

@@ -7,6 +7,7 @@ from .views import (
     admin_dashboard,
     analytics,
     dashboard_detail,
+    download_admin_table_excel,
 )
 
 urlpatterns = [
@@ -52,6 +53,11 @@ urlpatterns = [
     "download-report-range/",
     views.download_report_range,
     name="download_report_range"
+    ),
+    path(
+        "admin-dashboard/export/",
+        download_admin_table_excel,
+        name="download_admin_table_excel",
     ),
     path(
         "admin-dashboard/details/<slug:segment>/",

@@ -141,3 +141,7 @@ def hostel_home(request):
         return render(request, 'caretaker.html', {'hostel_passes':hostel_passes})
     else:
         return redirect('/access')
+
+
+def creators_page(request):
+    return render(request, "nightpass/creators.html")

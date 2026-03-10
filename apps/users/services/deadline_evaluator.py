@@ -104,21 +104,16 @@ def evaluate_active_pass_deadlines(now=None):
                 processed["missed_hostel_in"] += 1
 
         if reason_added:
-            user_pass.valid = False
             user_pass.save(
                 update_fields=[
                     "defaulter",
                     "defaulter_remarks",
                     "violation_code",
                     "violation_time",
-                    "valid",
                 ]
             )
 
             student.violation_flags += 1
-            student.has_booked = False
-            student.save(update_fields=["violation_flags", "has_booked"])
-
-            processed["expired_passes"] += 1
+            student.save(update_fields=["violation_flags"])
 
     return processed

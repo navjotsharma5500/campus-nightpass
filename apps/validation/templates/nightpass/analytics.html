@@ -58,6 +58,13 @@ body { background: #f8fafc; }
     border-radius: 6px;
 }
 
+.top-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
 .range-form {
     display: flex;
     align-items: end;
@@ -88,6 +95,19 @@ body { background: #f8fafc; }
     color: #fff;
     padding: 8px 12px;
     cursor: pointer;
+}
+
+.download-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 8px;
+    background: #0f766e;
+    color: #fff;
+    padding: 8px 12px;
+    text-decoration: none;
+    font-size: 13px;
 }
 
 
@@ -203,12 +223,17 @@ body {
                 <input type="date" name="to_date" value="{{ to_date }}">
             </div>
             <button type="submit">Apply</button>
+            <a class="download-btn" href="{% url 'download_report_range' %}?start_date={{ from_date }}&end_date={{ to_date }}">
+                Download Excel
+            </a>
         </form>
 
-        <a href="{% url 'admin_dashboard' %}" class="back-btn">
-            <span class="arrow">←</span>
-            Back to Dashboard
-        </a>
+        <div class="top-actions">
+            <a href="{% url 'admin_dashboard' %}" class="back-btn">
+                <span class="arrow">←</span>
+                Back to Dashboard
+            </a>
+        </div>
     </div>
 
     <!-- KPI CARDS -->

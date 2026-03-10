@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block content %}
+<style>
+html,body{overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+html::-webkit-scrollbar,body::-webkit-scrollbar{display:none}
+.creators-shell{max-width:1200px;margin:30px auto;padding:0 20px 40px}
+.top-row{display:flex;align-items:center;justify-content:flex-start;margin-bottom:12px}
+.back-btn{display:inline-flex;align-items:center;justify-content:center;background:#334155;border:1px solid #334155;padding:8px 14px;border-radius:999px;color:#fff;text-decoration:none;font-size:13px;font-weight:600}
+.creators-hero{position:relative;border-radius:18px;overflow:hidden;box-shadow:0 16px 36px rgba(0,0,0,.14);margin-bottom:24px}
+.creators-hero img{width:100%;height:300px;object-fit:cover;display:block}
+.hero-title{font-size:30px;font-weight:700;line-height:1.2;margin:0}
+.hero-sub{max-width:980px;font-size:14px;line-height:1.65;margin:0}
+.cards-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:26px}
+.dev-card{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:16px;box-shadow:0 8px 20px rgba(0,0,0,.06);cursor:pointer;transition:.25s}
+.dev-card:hover{transform:translateY(-6px);border-color:#60a5fa;box-shadow:0 14px 30px rgba(37,99,235,.22)}
+.dev-head{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.dev-avatar{width:64px;height:64px;border-radius:12px;object-fit:cover;border:2px solid #eef2ff}
+.dev-name{font-size:18px;font-weight:700;color:#0f172a}
+.dev-role{font-size:13px;font-weight:600;color:#1d4ed8}
+.dev-text{font-size:13px;color:#475569;line-height:1.6}
+.section-card{background:#fff;border-radius:14px;padding:18px 20px;box-shadow:0 8px 20px rgba(0,0,0,.06);margin-bottom:18px}
+.section-title{font-size:18px;font-weight:700;color:#0f172a;margin:0 0 8px}
+.section-text{font-size:14px;line-height:1.7;color:#334155;margin:0 0 10px}
+.section-list{margin:0;padding-left:18px;color:#334155;line-height:1.7;font-size:14px}
+.linkline{font-size:14px;color:#0f172a}
+.linkline a{color:#1d4ed8;text-decoration:none}
+.modal-wrap{position:fixed;inset:0;background:rgba(15,23,42,.7);display:none;align-items:center;justify-content:center;padding:20px;z-index:2200}
+.modal-card{background:#fff;max-width:760px;width:100%;border-radius:18px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.modal-top{background:linear-gradient(135deg,#111827,#1d4ed8);color:#fff;padding:20px;display:flex;align-items:center;gap:16px}
+.modal-avatar{width:96px;height:96px;border-radius:16px;object-fit:cover;border:2px solid rgba(255,255,255,.5)}
+.modal-title{margin:0;font-size:24px;font-weight:700}
+.modal-role{margin:4px 0 0;font-size:13px;opacity:.95}
+.modal-body{padding:18px 20px}
+.modal-body p{margin:0 0 12px;color:#334155;line-height:1.7}
+.modal-body h4{margin:0 0 10px;font-size:16px;color:#0f172a}
+.modal-body ul{margin:0 0 14px;padding-left:20px;color:#334155;line-height:1.7}
+.modal-actions{display:flex;justify-content:space-between;gap:10px;align-items:center}
+.linkedin-btn,.close-btn{padding:9px 12px;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none;border:none;cursor:pointer}
+.linkedin-btn{background:#0a66c2;color:#fff}
+.close-btn{background:#e2e8f0;color:#0f172a}
+@media(max-width:860px){.hero-title{font-size:22px}.hero-sub{font-size:13px}.creators-hero img{height:240px}}
+</style>
+
+<div class="creators-shell">
+    <div class="top-row">
+        <a class="back-btn" href="javascript:history.back()">Back</a>
+    </div>
+    <div class="creators-hero">
+        <img src="https://ik.imagekit.io/7khjnlfow/email-assets/NNCL1.png" alt="Timeline">
+    </div>
+
+    <div class="cards-grid">
+        <div class="dev-card" data-dev="navjot">
+            <div class="dev-head">
+                <img class="dev-avatar" src="https://ik.imagekit.io/7khjnlfow/email-assets/IMG_4888.JPG?updatedAt=1770071997943" alt="Navjot Sharma">
+                <div>
+                    <div class="dev-name">Navjot Sharma</div>
+                    <div class="dev-role">System Architect &amp; Lead Developer</div>
+                </div>
+            </div>
+            <p class="dev-text">Led the redesign and architecture of the Night Pass System Version 2.0, implementing the new scanning workflow, dashboard interface, and operational rules for hostel–library transit monitoring.</p>
+        </div>
+        <div class="dev-card" data-dev="aman">
+            <div class="dev-head">
+                <img class="dev-avatar" src="https://ik.imagekit.io/7khjnlfow/email-assets/1725703687306.jpg" alt="Aman Kapoor">
+                <div>
+                    <div class="dev-name">Aman Kapoor</div>
+                    <div class="dev-role">Core Backend Developer</div>
+                </div>
+            </div>
+            <p class="dev-text">Developed the initial backend framework and core functional modules of the Campus NightPass system using Django, forming the technical foundation for the platform.</p>
+        </div>
+        <div class="dev-card" data-dev="sagarika">
+            <div class="dev-head">
+                <img class="dev-avatar" src="https://ik.imagekit.io/7khjnlfow/email-assets/1753485244517.jpg" alt="Sagarika Wankhede">
+                <div>
+                    <div class="dev-name">Sagarika Wankhede</div>
+                    <div class="dev-role">Frontend Contributor</div>
+                </div>
+            </div>
+            <p class="dev-text">Contributed to the initial frontend interface and UI components during the early development phase of the NightPass system.</p>
+        </div>
+    </div>
+
+    <div class="section-card">
+        <h3 class="section-title">Project Description</h3>
+        <h3 class="section-title">Library Night Pass Management System – Creators</h3>
+        <p class="section-text">The Library Night Pass Management System (Version 2.0) is an institutional software solution developed for the Nava Nalanda Library under the Dean of Student Affairs Office at Thapar Institute of Engineering and Technology.</p>
+        <p class="section-text">This platform was designed to manage late-night academic access for students while ensuring security, accountability, and real-time monitoring of hostel-to-library movement. The system integrates booking, scanning verification, transit monitoring, and violation tracking through a modern dashboard-based interface.</p>
+        <p class="section-text">Version 2.0 represents a major redesign of the earlier system, introducing improved architecture, enhanced security workflows, and a fully redesigned administrative interface.</p>
+    </div>
+
+    <div class="section-card">
+        <h3 class="section-title">Software Ownership</h3>
+        <p class="section-text">This application is an official institutional software system developed for the Dean of Student Affairs Office at Thapar Institute of Engineering and Technology.</p>
+        <p class="section-text">All institutional rights and operational ownership remain with the DoSA Office.</p>
+    </div>
+
+    <div class="section-card">
+        <h3 class="section-title">Legacy System</h3>
+        <p class="section-text">The previous version of the Night Pass system was originally developed by Pancham Agarwal (Alumnus – COE).</p>
+        <p class="linkline">LinkedIn: <a href="https://www.linkedin.com/in/pancham1603/" target="_blank">https://www.linkedin.com/in/pancham1603/</a></p>
+        <p class="section-text">The current Version 2.0 represents a complete redesign and redevelopment, including new system architecture, updated database models, redesigned dashboards, and an improved scanning workflow.</p>
+    </div>
+
+    <div class="section-card">
+        <h3 class="section-title">Support</h3>
+        <p class="linkline">For technical support: <a href="mailto:itmh@thapar.edu">itmh@thapar.edu</a></p>
+    </div>
+</div>
+
+<div class="modal-wrap" id="developerModal">
+    <div class="modal-card">
+        <div class="modal-top">
+            <img id="modalAvatar" class="modal-avatar" src="" alt="Profile">
+            <div>
+                <h3 id="modalName" class="modal-title"></h3>
+                <p id="modalRole" class="modal-role"></p>
+            </div>
+        </div>
+        <div class="modal-body">
+            <p id="modalDescription"></p>
+            <h4>Key Contributions</h4>
+            <ul id="modalPoints"></ul>
+            <div class="modal-actions">
+                <a id="modalLinkedin" class="linkedin-btn" href="#" target="_blank">LinkedIn Profile</a>
+                <button type="button" class="close-btn" id="closeModal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const developerData = {
+  navjot: {
+    name: "Navjot Sharma",
+    role: "System Architect & Lead Developer",
+    avatar: "https://ik.imagekit.io/7khjnlfow/email-assets/IMG_4888.JPG?updatedAt=1770071997943",
+    description: "Navjot Sharma led the architectural redesign and system restructuring of the Library Night Pass Management System Version 2.0. Working under the DoSA Office, he implemented the updated database structure, redesigned dashboards, and created the improved scanning and violation monitoring workflows used in the current system.",
+    points: [
+      "System architecture redesign",
+      "Database restructuring and model updates",
+      "Development of the admin dashboard",
+      "Implementation of timer-based transit monitoring",
+      "Debugging and stabilization of backend modules",
+      "Redesign of the frontend interface and workflows",
+      "Deployment and system integration for institutional use"
+    ],
+    linkedin: "https://www.linkedin.com/in/navjot-sharma-0bb7143b1"
+  },
+  aman: {
+    name: "Aman Kapoor",
+    role: "Core Backend Developer",
+    avatar: "https://ik.imagekit.io/7khjnlfow/email-assets/1725703687306.jpg",
+    description: "Aman Kapoor played a significant role in the foundational backend development of the NightPass system. His work helped establish the initial Django-based framework and core functional modules that enabled student booking, verification, and tracking mechanisms.",
+    points: [
+      "Backend development using Django",
+      "Implementation of student booking logic",
+      "Development of verification and tracking modules",
+      "Backend API support for system operations",
+      "Contribution to the early functional base of the system"
+    ],
+    linkedin: "https://www.linkedin.com/in/aman-kapoor201/"
+  },
+  sagarika: {
+    name: "Sagarika Wankhede",
+    role: "Frontend Contributor",
+    avatar: "https://ik.imagekit.io/7khjnlfow/email-assets/1753485244517.jpg",
+    description: "Sagarika Wankhede contributed to the early user interface development and frontend components during the initial phase of the project.",
+    points: [
+      "Initial frontend interface components",
+      "UI structure development",
+      "Early-stage frontend support"
+    ],
+    linkedin: "https://www.linkedin.com/in/sagarikawankhede/"
+  }
+};
+
+const modal = document.getElementById("developerModal");
+const modalAvatar = document.getElementById("modalAvatar");
+const modalName = document.getElementById("modalName");
+const modalRole = document.getElementById("modalRole");
+const modalDescription = document.getElementById("modalDescription");
+const modalPoints = document.getElementById("modalPoints");
+const modalLinkedin = document.getElementById("modalLinkedin");
+
+document.querySelectorAll(".dev-card").forEach(card => {
+  card.addEventListener("click", () => {
+    const key = card.dataset.dev;
+    const item = developerData[key];
+    if (!item) return;
+    modalAvatar.src = item.avatar;
+    modalName.textContent = item.name;
+    modalRole.textContent = item.role;
+    modalDescription.textContent = item.description;
+    modalLinkedin.href = item.linkedin;
+    modalPoints.innerHTML = item.points.map(point => `<li>${point}</li>`).join("");
+    modal.style.display = "flex";
+  });
+});
+
+document.getElementById("closeModal").addEventListener("click", () => {
+  modal.style.display = "none";
+});
+
+modal.addEventListener("click", (event) => {
+  if (event.target === modal) {
+    modal.style.display = "none";
+  }
+});
+</script>
+{% endblock %}

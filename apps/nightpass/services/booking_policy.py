@@ -42,7 +42,7 @@ def validate_booking_policy(student, campus_resource):
         6: policy.allow_sunday,
     }
     if not weekday_flags.get(now.weekday(), True):
-        return _response("LIBRARY_CLOSED_TODAY", "Library is closed today")
+        return _response("NIGHT_PASS_NOT_AVAILABLE_ON_SUNDAYS", "Night Pass booking is not available on Sundays")
 
     if not _is_within_booking_window(now.time(), campus_resource.start_time, campus_resource.end_time):
         return _response(

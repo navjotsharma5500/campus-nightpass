@@ -10,8 +10,21 @@
   <div class="dashboard-container">
     <div class="activity-section">
       <div class="top-head">
-        <h3>{{ title }}</h3>
-        <a class="secondary-btn" href="{% url 'admin_dashboard' %}">Back to Dashboard</a>
+        <h3>{{ title }} ({{ selected_date_display }})</h3>
+        <a class="secondary-btn" href="{% url 'admin_dashboard' %}?date={{ selected_date }}">Back to Dashboard</a>
+      </div>
+
+      <div class="toolbar">
+        <form class="date-range-form" method="get">
+          <div class="date-group">
+            <label>Date</label>
+            <input type="date" name="date" value="{{ selected_date }}" required>
+          </div>
+          <button type="submit" class="secondary-btn">Apply</button>
+        </form>
+        <a class="secondary-btn" href="{% url 'download_admin_table_excel' %}?scope=detail&segment={{ segment }}&date={{ selected_date }}">
+          Download This Table
+        </a>
       </div>
 
       {% if segment == "blocked-students" %}

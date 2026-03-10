@@ -58,6 +58,9 @@
         .scanner-table-wrap { overflow-x:auto; }
         .scanner-table { width:100%; border-collapse:collapse; font-size:13px; }
         .scanner-table th, .scanner-table td { padding:10px 8px; border-bottom:1px solid #eee; text-align:left; vertical-align:top; }
+        .footer-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 2100; background: #696b6d; padding: 8px 14px; box-sizing: border-box; display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #fff; }
+        .footer-link { color: #fff; text-decoration: none; background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.25); padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+        .footer-title { font-size: 16px; font-weight: 600; }
         .scanner-table th { background:#fafafa; color:#444; font-size:12px; text-transform:uppercase; letter-spacing:0.03em; }
         .status-pill { display:inline-block; padding:4px 10px; border-radius:999px; background:#f3f4f6; font-weight:600; }
         .status-pill.violation { background:#fee2e2; color:#991b1b; }
@@ -411,6 +414,11 @@ Quagga.onDetected((res) => {
     submitScan(code);
 });
 </script>
+<div class="footer-bar">
+    <a class="footer-link" href="mailto:itmh@thapar.edu">Support</a>
+    <span class="footer-title">Campus Library Night Pass · TIET</span>
+    <a class="footer-link" href="{% url 'creators_page' %}">Creators</a>
+</div>
 
 </body>
 </html>
