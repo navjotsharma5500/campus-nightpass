@@ -9,7 +9,7 @@ from ..users.models import Student, NightPass
 from ..users.management.commands.check_defaulters import check_defaulters
 from ..users.management.commands.check_defaulter_no_checkin import check_defaulters_no_checkin
 from ..users.services.deadline_evaluator import evaluate_active_pass_deadlines
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from admin_extra_buttons.api import ExtraButtonsMixin, button
 from admin_extra_buttons.utils import HttpResponseRedirectToReferrer
@@ -81,10 +81,17 @@ class SettingsAdmin(ExtraButtonsMixin, admin.ModelAdmin):
     )
     def normalize_specific_date_violations(self, request):
         raw_date = (request.GET.get("normalize_date") or "").strip()
-        try:
-            target_date = date.fromisoformat(raw_date) if raw_date else date.today()
-        except ValueError:
-            target_date = date.today()
+        target_date = date.today()
+        if raw_date:
+            parsed = None
+            for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%Y/%m/%d"):
+                try:
+                    parsed = datetime.strptime(raw_date, fmt).date()
+                    break
+                except ValueError:
+                    continue
+            if parsed:
+                target_date = parsed
 
         with transaction.atomic():
             rows = list(

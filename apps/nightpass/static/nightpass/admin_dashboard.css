@@ -42,6 +42,7 @@ body {
 }
 
 .summary-header h2 {
+    margin: 0;
     font-size: 22px;
     font-weight: 600;
 }
@@ -54,9 +55,13 @@ body {
 
 .header-actions {
     display: flex;
-    align-items: center;
-    gap: 10px;
+    align-items: flex-start;
+    gap: 12px;
     flex-wrap: wrap;
+}
+
+.header-actions a {
+    white-space: nowrap;
 }
 
 /* ===== Filter Buttons ===== */
@@ -221,13 +226,17 @@ tbody tr:hover {
 
 .primary-btn,
 .secondary-btn {
-    padding: 12px 28px;
+    padding: 8px 14px;
     border-radius: 8px;
     text-decoration: none;
     font-weight: 500;
+    font-size: 13px;
+    line-height: 1.2;
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    min-height: 34px;
+    white-space: nowrap;
 }
 
 .primary-btn {
@@ -246,14 +255,6 @@ tbody tr:hover {
 
 .secondary-btn:hover {
     background: #34384f;
-}
-
-.header-actions a {
-    white-space: nowrap;
-}
-
-.summary-header h2 {
-    margin: 0;
 }
 
 /* ===== Alert Card ===== */
@@ -300,9 +301,9 @@ footer {
 .date-range-form {
     display: flex;
     align-items: flex-end;
-    gap: 15px;
+    gap: 12px;
     background: #f4f6f9;
-    padding: 12px 18px;
+    padding: 10px 14px;
     border-radius: 10px;
 }
 
@@ -310,11 +311,14 @@ footer {
 .date-group {
     display: flex;
     flex-direction: column;
+    gap: 4px;
     font-size: 12px;
-    font-weight: 500;
+    font-weight: 600;
 }
 
 .date-group input {
+    min-width: 150px;
+    height: 34px;
     padding: 6px 10px;
     border-radius: 6px;
     border: 1px solid #d1d5db;
@@ -364,15 +368,9 @@ footer {
 }
 
 .search-form input[type="text"] {
-    min-width: 260px;
-    padding: 8px 10px;
+    min-width: 280px;
+    height: 34px;
+    padding: 7px 10px;
     border-radius: 8px;
     border: 1px solid #d1d5db;
-}
-
-.dashboard-container .secondary-btn,
-.dashboard-container .primary-btn {
-    padding: 8px 14px;
-    font-size: 13px;
-    margin: 0;
 }
