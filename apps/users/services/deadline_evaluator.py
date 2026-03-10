@@ -9,8 +9,10 @@ from .violation_utils import append_violation
 
 
 MISSED_LIBRARY_IN = "MISSED_LIBRARY_IN"
+MISSED_LIBRARY_OUT = "MISSED_LIBRARY_OUT"
 MISSED_HOSTEL_IN = "MISSED_HOSTEL_IN"
 OUTSIDE_LIBRARY_IN_START = time(20, 0)
+DEFAULT_LIBRARY_OUT_CUTOFF = time(23, 0)
 DEFAULT_HOSTEL_OUT_LIBRARY_TIMER_MINUTES = 40
 
 
@@ -57,6 +59,22 @@ def _should_flag_missed_hostel_in(user_pass, now, backend_timer_minutes):
     return now > deadline
 
 
+def _library_out_cutoff_time(policy):
+    if policy and policy.library_out_cutoff_time:
+        return policy.library_out_cutoff_time
+    return DEFAULT_LIBRARY_OUT_CUTOFF
+
+
+def _should_flag_missed_library_out(user_pass, now, cutoff_time):
+    if user_pass.library_out_time:
+        return False
+    cutoff = timezone.make_aware(
+        datetime.combine(user_pass.date, cutoff_time),
+        timezone.get_current_timezone(),
+    )
+    return now > cutoff
+
+
 @transaction.atomic
 def evaluate_active_pass_deadlines(now=None):
     now = now or timezone.now()
@@ -64,6 +82,7 @@ def evaluate_active_pass_deadlines(now=None):
     processed = {
         "expired_passes": 0,
         "missed_library_in": 0,
+        "missed_library_out": 0,
         "missed_hostel_in": 0,
     }
 
@@ -71,10 +90,12 @@ def evaluate_active_pass_deadlines(now=None):
         "user__student",
         "user__student__hostel",
     ).filter(valid=True)
+    library_out_cutoff_time = _library_out_cutoff_time(policy)
 
     for user_pass in active_passes:
         student = user_pass.user.student
         frontend_timer_minutes, hostel_out_timer_minutes, backend_timer_minutes = _get_timers(student, policy)
+        was_defaulter = bool(user_pass.defaulter)
 
         reason_added = False
 
@@ -92,6 +113,16 @@ def evaluate_active_pass_deadlines(now=None):
             )
             if reason_added:
                 processed["missed_library_in"] += 1
+
+        elif user_pass.current_step == 2 and _should_flag_missed_library_out(user_pass, now, library_out_cutoff_time):
+            reason_added = append_violation(
+                user_pass,
+                MISSED_LIBRARY_OUT,
+                "Required Library OUT scan missed before configured cutoff time.",
+                occurred_at=now,
+            )
+            if reason_added:
+                processed["missed_library_out"] += 1
 
         elif user_pass.current_step == 3 and _should_flag_missed_hostel_in(user_pass, now, backend_timer_minutes):
             reason_added = append_violation(
@@ -113,7 +144,8 @@ def evaluate_active_pass_deadlines(now=None):
                 ]
             )
 
-            student.violation_flags += 1
-            student.save(update_fields=["violation_flags"])
+            if not was_defaulter:
+                student.violation_flags += 1
+                student.save(update_fields=["violation_flags"])
 
     return processed

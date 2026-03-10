@@ -1,12 +1,20 @@
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from apps.global_settings.models import Settings
 from apps.nightpass.models import CampusResource, Hostel
+from apps.nightpass.services.booking_policy import validate_booking_policy
 from apps.users.models import CustomUser, NightPass, Student
-from .services.lifecycle import step_label
+from apps.users.services.deadline_evaluator import evaluate_active_pass_deadlines
+from .services.lifecycle import (
+    step_label,
+    transition_checkin_to_hostel,
+    transition_checkin_to_library,
+    transition_checkout_from_library,
+)
 
 
 class LifecycleServiceTests(SimpleTestCase):
@@ -121,3 +129,163 @@ class AdminDashboardEnhancementTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "STUDENT ACTIVITY TIMELINE")
         self.assertContains(response, "Today Student")
+
+
+class ViolationThresholdBehaviorTests(TestCase):
+    def setUp(self):
+        now = timezone.now()
+        self.hostel = Hostel.objects.create(
+            name="Threshold Hostel",
+            contact_number="9999999999",
+            email="threshold@hostel.com",
+        )
+        self.resource = CampusResource.objects.create(
+            name="Threshold Library",
+            description="Library",
+            max_capacity=100,
+            start_time=time(0, 0),
+            end_time=time(23, 59),
+            is_booking=True,
+            is_display=True,
+            default_pass_type="HOSTEL",
+        )
+        self.settings = Settings.objects.create(
+            max_violation_count=3,
+            allow_monday=True,
+            allow_tuesday=True,
+            allow_wednesday=True,
+            allow_thursday=True,
+            allow_friday=True,
+            allow_saturday=True,
+            allow_sunday=True,
+            frontend_checkin_timer=40,
+            backend_checkin_timer=40,
+            library_timer_for_hostel_out=40,
+            library_out_cutoff_time=time(23, 0),
+        )
+        self.user = CustomUser.objects.create_user(
+            email="threshold@student.com",
+            password="pass12345",
+            user_type="student",
+        )
+        self.student = Student.objects.create(
+            user=self.user,
+            name="Threshold Student",
+            registration_number="REGTHR01",
+            hostel=self.hostel,
+        )
+
+    def _create_pass(self, current_step=1):
+        now = timezone.now()
+        user_pass = NightPass.objects.create(
+            user=self.user,
+            start_time=now.time(),
+            end_time=now + timedelta(hours=4),
+            campus_resource=self.resource,
+        )
+        NightPass.objects.filter(pass_id=user_pass.pass_id).update(
+            date=timezone.localdate(),
+            current_step=current_step,
+            valid=True,
+        )
+        user_pass.refresh_from_db()
+        return user_pass
+
+    def test_booking_block_uses_configured_max_violation_count(self):
+        self.student.violation_flags = 1
+        self.student.save(update_fields=["violation_flags"])
+        self.assertIsNone(validate_booking_policy(self.student, self.resource))
+
+        self.student.violation_flags = 3
+        self.student.save(update_fields=["violation_flags"])
+        blocked = validate_booking_policy(self.student, self.resource)
+        self.assertEqual(blocked["reason_code"], "BLOCKED_MAX_VIOLATIONS")
+
+        self.settings.max_violation_count = 10
+        self.settings.save(update_fields=["max_violation_count"])
+        self.assertIsNone(validate_booking_policy(self.student, self.resource))
+
+    def test_multiple_violations_same_pass_increment_once(self):
+        user_pass = self._create_pass(current_step=1)
+        NightPass.objects.filter(pass_id=user_pass.pass_id).update(
+            hostel_checkout_time=timezone.now() - timedelta(minutes=50)
+        )
+        user_pass.refresh_from_db()
+
+        transition_checkin_to_library(user_pass)
+        self.student.refresh_from_db()
+        self.assertEqual(self.student.violation_flags, 1)
+
+        transition_checkout_from_library(user_pass)
+        user_pass.refresh_from_db()
+        user_pass.library_out_time = timezone.now() - timedelta(minutes=50)
+        user_pass.save(update_fields=["library_out_time"])
+
+        transition_checkin_to_hostel(self.student)
+        self.student.refresh_from_db()
+        self.assertEqual(self.student.violation_flags, 1)
+
+    def test_library_in_status_after_11_pm_marks_violation(self):
+        user_pass = self._create_pass(current_step=2)
+        now = timezone.now()
+        NightPass.objects.filter(pass_id=user_pass.pass_id).update(
+            date=timezone.localdate(now),
+            library_in_time=now - timedelta(hours=1),
+            library_out_time=None,
+            valid=True,
+            defaulter=False,
+            violation_code=None,
+            defaulter_remarks="",
+        )
+        user_pass.refresh_from_db()
+
+        cutoff_now = timezone.make_aware(
+            datetime.combine(timezone.localdate(now), time(23, 5)),
+            timezone.get_current_timezone(),
+        )
+        evaluate_active_pass_deadlines(now=cutoff_now)
+        self.student.refresh_from_db()
+        user_pass.refresh_from_db()
+
+        self.assertTrue(user_pass.defaulter)
+        self.assertIn("MISSED_LIBRARY_OUT", user_pass.violation_code or "")
+        self.assertEqual(self.student.violation_flags, 1)
+
+        evaluate_active_pass_deadlines(now=cutoff_now + timedelta(minutes=1))
+        self.student.refresh_from_db()
+        self.assertEqual(self.student.violation_flags, 1)
+
+    def test_library_out_cutoff_time_respects_settings_value(self):
+        self.settings.library_out_cutoff_time = time(22, 0)
+        self.settings.save(update_fields=["library_out_cutoff_time"])
+
+        user_pass = self._create_pass(current_step=2)
+        now = timezone.now()
+        NightPass.objects.filter(pass_id=user_pass.pass_id).update(
+            date=timezone.localdate(now),
+            library_in_time=now - timedelta(hours=1),
+            library_out_time=None,
+            valid=True,
+            defaulter=False,
+            violation_code=None,
+            defaulter_remarks="",
+        )
+        user_pass.refresh_from_db()
+
+        before_cutoff = timezone.make_aware(
+            datetime.combine(timezone.localdate(now), time(21, 59)),
+            timezone.get_current_timezone(),
+        )
+        evaluate_active_pass_deadlines(now=before_cutoff)
+        user_pass.refresh_from_db()
+        self.assertFalse(user_pass.defaulter)
+
+        after_cutoff = timezone.make_aware(
+            datetime.combine(timezone.localdate(now), time(22, 5)),
+            timezone.get_current_timezone(),
+        )
+        evaluate_active_pass_deadlines(now=after_cutoff)
+        self.student.refresh_from_db()
+        user_pass.refresh_from_db()
+        self.assertTrue(user_pass.defaulter)
+        self.assertEqual(self.student.violation_flags, 1)

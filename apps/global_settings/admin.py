@@ -1,6 +1,8 @@
 from django.contrib import admin
 from django.http import HttpResponseRedirect
 from django.urls import reverse
+from django.db import transaction
+from django.db.models import Count
 from .models import Settings
 from ..nightpass.models import CampusResource
 from ..users.models import Student, NightPass
@@ -70,5 +72,56 @@ class SettingsAdmin(ExtraButtonsMixin, admin.ModelAdmin):
     @button(html_attrs={'style': 'background-color:#fee2e2;color:black'})
     def defaulters(self, request):
         return HttpResponseRedirect(reverse("superuser_defaulters"))
+
+    @button(
+        html_attrs={
+            'style': 'background-color:#fde68a;color:black',
+            'onclick': "const d=prompt('Enter date (YYYY-MM-DD). Leave blank for today.','');if(d!==null){window.location=this.href+'?normalize_date='+encodeURIComponent(d);}return false;",
+        }
+    )
+    def normalize_specific_date_violations(self, request):
+        raw_date = (request.GET.get("normalize_date") or "").strip()
+        try:
+            target_date = date.fromisoformat(raw_date) if raw_date else date.today()
+        except ValueError:
+            target_date = date.today()
+
+        with transaction.atomic():
+            rows = list(
+                NightPass.objects.filter(date=target_date, defaulter=True)
+                .values("user")
+                .annotate(date_defaulters=Count("pass_id"))
+            )
+
+            updated_students = 0
+            for row in rows:
+                student = Student.objects.select_for_update().filter(user_id=row["user"]).first()
+                if not student:
+                    continue
+                date_defaulters = int(row["date_defaulters"] or 0)
+                if date_defaulters <= 0:
+                    continue
+                previous_count = NightPass.objects.filter(
+                    user_id=row["user"],
+                    defaulter=True,
+                ).exclude(date=target_date).count()
+                normalized_total = previous_count + 1
+                if normalized_total != student.violation_flags:
+                    student.violation_flags = normalized_total
+                    student.save(update_fields=["violation_flags"])
+                    updated_students += 1
+
+            updated_passes = NightPass.objects.filter(date=target_date, defaulter=True).update(
+                defaulter=False,
+                defaulter_remarks="",
+                violation_code=None,
+                violation_time=None,
+            )
+
+        self.message_user(
+            request,
+            f"Normalization applied for {target_date.isoformat()}. Students normalized: {updated_students}. Defaulter passes cleared: {updated_passes}.",
+        )
+        return HttpResponseRedirectToReferrer(request)
 # Register your models here.
 admin.site.register(Settings, SettingsAdmin)

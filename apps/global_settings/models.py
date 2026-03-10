@@ -9,6 +9,7 @@ class Settings(models.Model):
     backend_checkin_timer = models.IntegerField(blank=True, null=True, default=0)
     scan_start_time = models.TimeField(blank=True, null=True, help_text="Scanner start time window.")
     scan_end_time = models.TimeField(blank=True, null=True, help_text="Scanner end time window.")
+    library_out_cutoff_time = models.TimeField(blank=True, null=True, help_text="Library OUT cutoff time. Students still inside library after this time are marked defaulter.")
 
     last_out_from_hostel = models.TimeField(blank=True, null=True, verbose_name="Last Out From Hostel")
 

@@ -208,11 +208,13 @@ def checkin_to_location(user_pass, campus_resource):
     if user_pass.hostel_checkout_time:
         transit = now - user_pass.hostel_checkout_time
         if transit > timedelta(minutes=TRANSIT_LIMIT_MINUTES):
+            was_defaulter = bool(user_pass.defaulter)
             user_pass.defaulter = True
             user_pass.defaulter_remarks = f"Late arrival ({transit.seconds // 60} mins)"
             student = user_pass.user.student
-            student.violation_flags += 1
-            student.save()
+            if not was_defaulter:
+                student.violation_flags += 1
+                student.save()
 
     user_pass.library_in_time = now
     user_pass.current_step = 2
@@ -245,13 +247,15 @@ def checkin_to_hostel(student):
     if user_pass.library_out_time:
         transit = now - user_pass.library_out_time
         if transit > timedelta(minutes=TRANSIT_LIMIT_MINUTES):
+            was_defaulter = bool(user_pass.defaulter)
             user_pass.defaulter = True
             remark = f"Late return ({transit.seconds // 60} mins)"
             user_pass.defaulter_remarks = (
                 (user_pass.defaulter_remarks + " | " + remark)
                 if user_pass.defaulter_remarks else remark
             )
-            student.violation_flags += 1
+            if not was_defaulter:
+                student.violation_flags += 1
 
     student.is_checked_in = True
     student.hostel_checkin_time = now

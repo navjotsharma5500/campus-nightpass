@@ -225,8 +225,9 @@ tbody tr:hover {
     border-radius: 8px;
     text-decoration: none;
     font-weight: 500;
-    margin: 0 10px;
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .primary-btn {
@@ -245,6 +246,14 @@ tbody tr:hover {
 
 .secondary-btn:hover {
     background: #34384f;
+}
+
+.header-actions a {
+    white-space: nowrap;
+}
+
+.summary-header h2 {
+    margin: 0;
 }
 
 /* ===== Alert Card ===== */

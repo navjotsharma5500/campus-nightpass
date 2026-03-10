@@ -86,8 +86,9 @@ def _resolve_transit_timers(student, now=None):
 
 
 def _mark_violation(user_pass, student, code, remark, occurred_at=None):
+    was_defaulter = bool(user_pass.defaulter)
     added = append_violation(user_pass, code, remark, occurred_at=occurred_at)
-    if added:
+    if added and not was_defaulter:
         student.violation_flags += 1
     return added
 
