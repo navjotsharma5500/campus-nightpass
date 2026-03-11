@@ -39,3 +39,7 @@ class Settings(models.Model):
 
     class Meta:
         verbose_name_plural = 'Settings'
+
+    @classmethod
+    def current(cls):
+        return cls.objects.order_by("-pk").first()

@@ -78,7 +78,7 @@ def _should_flag_missed_library_out(user_pass, now, cutoff_time):
 @transaction.atomic
 def evaluate_active_pass_deadlines(now=None):
     now = now or timezone.now()
-    policy = Settings.objects.first()
+    policy = Settings.current()
     processed = {
         "expired_passes": 0,
         "missed_library_in": 0,

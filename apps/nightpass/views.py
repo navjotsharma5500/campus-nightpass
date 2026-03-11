@@ -30,7 +30,7 @@ def _format_booking_time(value):
 
 @login_required
 def campus_resources_home(request):
-    Settings = settings.objects.first()
+    Settings = settings.current()
     campus_resources = CampusResource.objects.filter(is_display=True)
     user = request.user
     if user.user_type == 'student':

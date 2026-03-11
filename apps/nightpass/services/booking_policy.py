@@ -20,7 +20,7 @@ def _format_booking_time(value):
 
 
 def validate_booking_policy(student, campus_resource):
-    policy = Settings.objects.first()
+    policy = Settings.current()
     if not policy:
         return _response("NO_ACTIVE_POLICY", "No active booking policy found.")
 

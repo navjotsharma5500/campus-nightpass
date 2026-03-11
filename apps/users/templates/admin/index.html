@@ -32,6 +32,10 @@
         <div class="np-admin-kicker">Thapar NightPass</div>
         <h1>Super Admin Dashboard</h1>
         <p>Open modules from one place and manage platform operations.</p>
+        <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;margin-top:8px;">
+            <input id="super-admin-auto-refresh-toggle" type="checkbox">
+            Auto refresh 30s
+        </label>
     </section>
 
     <section class="np-admin-grid">
@@ -135,4 +139,32 @@
         {% endif %}
     </section>
 </div>
+<script>
+(() => {
+  const key = "nightpass_super_admin_dashboard_auto_refresh";
+  const toggle = document.getElementById("super-admin-auto-refresh-toggle");
+  if (!toggle) return;
+  toggle.checked = localStorage.getItem(key) === "1";
+  let timer = null;
+  const start = () => {
+    if (timer) clearInterval(timer);
+    timer = setInterval(() => window.location.reload(), 30000);
+  };
+  const stop = () => {
+    if (!timer) return;
+    clearInterval(timer);
+    timer = null;
+  };
+  if (toggle.checked) start();
+  toggle.addEventListener("change", () => {
+    if (toggle.checked) {
+      localStorage.setItem(key, "1");
+      start();
+    } else {
+      localStorage.removeItem(key);
+      stop();
+    }
+  });
+})();
+</script>
 {% endblock %}

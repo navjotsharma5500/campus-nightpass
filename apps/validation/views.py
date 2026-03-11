@@ -109,8 +109,8 @@ def _activity_queryset_for_date(selected_date):
 
 def _blocked_students_queryset(max_violations):
     return Student.objects.select_related("hostel").filter(
-        Q(violation_flags__gte=max_violations) | Q(user__nightpass__defaulter=True)
-    ).distinct().order_by("-violation_flags", "name")
+        violation_flags__gte=max_violations
+    ).order_by("-violation_flags", "name")
 
 
 def _apply_activity_filter(queryset, activity_tab, max_violations):
@@ -354,7 +354,7 @@ def scanner(request):
 @user_passes_test(is_admin)
 def admin_dashboard(request):
     selected_date = _parse_dashboard_date(request)
-    policy = Settings.objects.first()
+    policy = Settings.current()
     max_violations = int(policy.max_violation_count) if policy and policy.max_violation_count is not None else 3
 
     today_passes = _activity_queryset_for_date(selected_date)
@@ -556,7 +556,7 @@ def download_report_range(request):
 @user_passes_test(is_admin)
 def dashboard_detail(request, segment):
     selected_date = _parse_dashboard_date(request)
-    policy = Settings.objects.first()
+    policy = Settings.current()
     max_violations = int(policy.max_violation_count) if policy and policy.max_violation_count is not None else 3
 
     title = "Dashboard Details"
@@ -607,7 +607,7 @@ def dashboard_detail(request, segment):
 @user_passes_test(is_admin)
 def download_admin_table_excel(request):
     scope = (request.GET.get("scope") or "").strip()
-    policy = Settings.objects.first()
+    policy = Settings.current()
     max_violations = int(policy.max_violation_count) if policy and policy.max_violation_count is not None else 3
     selected_date = _parse_dashboard_date(request)
 

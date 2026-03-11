@@ -7,7 +7,7 @@ from django.utils import timezone
 
 
 def check_defaulters_no_checkin():
-    Settings = settings.objects.first()
+    Settings = settings.current()
 
     previous_day_nightpasses = NightPass.objects.filter(date=date.today()-timedelta(days=1), defaulter=True)
     for nightpass in previous_day_nightpasses:

@@ -145,7 +145,7 @@ class AdminDashboardEnhancementTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["blocked_students"], 1)
 
-    def test_blocked_students_count_includes_defaulters(self):
+    def test_blocked_students_count_uses_threshold_not_single_defaulter(self):
         Settings.objects.create(max_violation_count=50)
         today = timezone.localdate()
         old_day = today - timedelta(days=2)
@@ -159,7 +159,7 @@ class AdminDashboardEnhancementTests(TestCase):
         response = self.client.get(reverse("admin_dashboard"), {"date": today.isoformat()})
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context["blocked_students"], 1)
+        self.assertEqual(response.context["blocked_students"], 0)
 
 
 class ViolationThresholdBehaviorTests(TestCase):
@@ -234,6 +234,27 @@ class ViolationThresholdBehaviorTests(TestCase):
 
         self.settings.max_violation_count = 10
         self.settings.save(update_fields=["max_violation_count"])
+        self.assertIsNone(validate_booking_policy(self.student, self.resource))
+
+    def test_booking_uses_latest_settings_record_for_violation_threshold(self):
+        self.settings.max_violation_count = 1
+        self.settings.save(update_fields=["max_violation_count"])
+        Settings.objects.create(
+            max_violation_count=10,
+            allow_monday=True,
+            allow_tuesday=True,
+            allow_wednesday=True,
+            allow_thursday=True,
+            allow_friday=True,
+            allow_saturday=True,
+            allow_sunday=True,
+            frontend_checkin_timer=40,
+            backend_checkin_timer=40,
+            library_timer_for_hostel_out=40,
+            library_out_cutoff_time=time(23, 0),
+        )
+        self.student.violation_flags = 1
+        self.student.save(update_fields=["violation_flags"])
         self.assertIsNone(validate_booking_policy(self.student, self.resource))
 
     def test_multiple_violations_same_pass_increment_once(self):
