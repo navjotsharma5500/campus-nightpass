@@ -109,8 +109,8 @@ def _activity_queryset_for_date(selected_date):
 
 def _blocked_students_queryset(max_violations):
     return Student.objects.select_related("hostel").filter(
-        violation_flags__gte=max_violations,
-    ).order_by("-violation_flags", "name")
+        Q(violation_flags__gte=max_violations) | Q(user__nightpass__defaulter=True)
+    ).distinct().order_by("-violation_flags", "name")
 
 
 def _apply_activity_filter(queryset, activity_tab, max_violations):

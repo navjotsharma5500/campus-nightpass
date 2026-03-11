@@ -247,7 +247,9 @@ def superuser_defaulters(request):
     search_term = (request.GET.get("q") or "").strip()
     policy = Settings.objects.first()
     max_violations = int(policy.max_violation_count) if policy and policy.max_violation_count is not None else 3
-    students = Student.objects.select_related("hostel").filter(violation_flags__gte=max_violations)
+    students = Student.objects.select_related("hostel").filter(
+        Q(violation_flags__gte=max_violations) | Q(user__nightpass__defaulter=True)
+    ).distinct()
     students = _student_search_queryset(students, search_term).order_by("-violation_flags", "name")
     return render(
         request,

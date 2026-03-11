@@ -1,8 +1,10 @@
 from django.contrib import admin
+from django.contrib import messages
 from django.http import HttpResponseRedirect
 from django.urls import reverse
 from django.db import transaction
 from django.db.models import Count
+from django.template.response import TemplateResponse
 from urllib.parse import parse_qs, urlparse
 from .models import Settings
 from ..nightpass.models import CampusResource
@@ -77,10 +79,18 @@ class SettingsAdmin(ExtraButtonsMixin, admin.ModelAdmin):
     @button(
         html_attrs={
             'style': 'background-color:#fde68a;color:black',
-            'onclick': "const d=prompt('Enter date (YYYY-MM-DD). Leave blank for today.','');if(d===null){return false;}const u=new URL(this.href, window.location.origin);u.searchParams.set('normalize_date', d.trim());window.location=u.toString();return false;",
         }
     )
     def normalize_specific_date_violations(self, request):
+        def render_input():
+            context = dict(
+                self.admin_site.each_context(request),
+                opts=self.model._meta,
+                title="Normalize Specific Date Violations",
+                action_url=request.path,
+            )
+            return TemplateResponse(request, "admin/global_settings/normalize_specific_date.html", context)
+
         raw_date = (
             (request.GET.get("normalize_date") or "")
             or (request.POST.get("normalize_date") or "")
@@ -89,17 +99,21 @@ class SettingsAdmin(ExtraButtonsMixin, admin.ModelAdmin):
             referer = request.META.get("HTTP_REFERER") or ""
             if referer:
                 raw_date = (parse_qs(urlparse(referer).query).get("normalize_date", [""])[0] or "").strip()
+        if not raw_date:
+            return render_input()
         target_date = date.today()
+        parsed = None
         if raw_date:
-            parsed = None
             for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%Y/%m/%d"):
                 try:
                     parsed = datetime.strptime(raw_date, fmt).date()
                     break
                 except ValueError:
                     continue
-            if parsed:
-                target_date = parsed
+        if not parsed:
+            self.message_user(request, "Invalid date. Use YYYY-MM-DD, DD-MM-YYYY, DD/MM/YYYY, or YYYY/MM/DD.", level=messages.ERROR)
+            return render_input()
+        target_date = parsed
 
         with transaction.atomic():
             rows = list(

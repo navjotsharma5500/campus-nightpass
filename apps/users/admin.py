@@ -1,8 +1,12 @@
 from django.contrib import admin
+from django.contrib import messages
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from django.contrib.auth.forms import UserChangeForm, UserCreationForm
+from django.contrib.auth import login
 from django import forms
 from django.http import HttpResponse
+from django.shortcuts import get_object_or_404, redirect
+from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.html import format_html
 from rangefilter.filters import DateRangeFilter
@@ -232,8 +236,13 @@ class StudentAdmin(ImportExportModelAdmin):
         'registration_number',
         'hostel',
         'has_booked',
+        'hostel_out_status',
+        'library_in_status',
+        'library_out_status',
+        'hostel_in_status',
         'current_location',
-        'violation_flags'
+        'violation_flags',
+        'impersonate_action',
     )
 
     search_fields = ('name', 'registration_number')
@@ -243,6 +252,16 @@ class StudentAdmin(ImportExportModelAdmin):
     readonly_fields = ('last_checkout_time',)
 
     list_filter = ('hostel', YearWiseFilter, 'has_booked', 'violation_flags')
+
+    def get_urls(self):
+        custom = [
+            path(
+                "impersonate/<str:registration_number>/",
+                self.admin_site.admin_view(self.impersonate_student),
+                name="student_impersonate",
+            )
+        ]
+        return custom + super().get_urls()
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == 'user':
@@ -294,6 +313,54 @@ class StudentAdmin(ImportExportModelAdmin):
         return format_html("<b style='color:red;'>Outside</b>")
 
     current_location.short_description = "Status"
+
+    def _latest_student_pass(self, obj):
+        return NightPass.objects.filter(user=obj.user).order_by("-date", "-start_time").first()
+
+    def _tick_cross(self, value):
+        return format_html("<span style='color:{};font-weight:700;'>{}</span>", "#16a34a" if value else "#dc2626", "✓" if value else "✗")
+
+    def hostel_out_status(self, obj):
+        user_pass = self._latest_student_pass(obj)
+        return self._tick_cross(bool(user_pass and user_pass.hostel_checkout_time))
+
+    def library_in_status(self, obj):
+        user_pass = self._latest_student_pass(obj)
+        return self._tick_cross(bool(user_pass and user_pass.library_in_time))
+
+    def library_out_status(self, obj):
+        user_pass = self._latest_student_pass(obj)
+        return self._tick_cross(bool(user_pass and user_pass.library_out_time))
+
+    def hostel_in_status(self, obj):
+        user_pass = self._latest_student_pass(obj)
+        return self._tick_cross(bool(user_pass and user_pass.hostel_checkin_time))
+
+    hostel_out_status.short_description = "Hostel OUT"
+    library_in_status.short_description = "Library IN"
+    library_out_status.short_description = "Library OUT"
+    hostel_in_status.short_description = "Hostel IN"
+
+    def impersonate_action(self, obj):
+        if not obj.user_id:
+            return "-"
+        url = reverse("admin:student_impersonate", args=[obj.registration_number])
+        return format_html("<a class='button' href='{}'>Impersonate</a>", url)
+
+    impersonate_action.short_description = "Impersonate"
+
+    def impersonate_student(self, request, registration_number):
+        if not request.user.is_superuser:
+            self.message_user(request, "Only super admin can impersonate.", level=messages.ERROR)
+            return redirect("admin:users_student_changelist")
+
+        student = get_object_or_404(Student.objects.select_related("user"), registration_number=registration_number)
+        if not student.user_id:
+            self.message_user(request, "Student has no linked user account.", level=messages.ERROR)
+            return redirect("admin:users_student_changelist")
+
+        login(request, student.user, backend="django.contrib.auth.backends.ModelBackend")
+        return redirect("/")
 
     class Media:
         css = {"all": ("admin/custom_admin_dashboard.css",)}

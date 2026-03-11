@@ -29,6 +29,7 @@ def top_blocked_students(limit=5):
     max_violations = int(policy.max_violation_count) if policy and policy.max_violation_count is not None else 3
     return (
         Student.objects.select_related("hostel")
-        .filter(violation_flags__gte=max_violations)
+        .filter(Q(violation_flags__gte=max_violations) | Q(user__nightpass__defaulter=True))
+        .distinct()
         .order_by("-violation_flags", "name")[:limit]
     )

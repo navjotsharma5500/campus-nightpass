@@ -145,6 +145,22 @@ class AdminDashboardEnhancementTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["blocked_students"], 1)
 
+    def test_blocked_students_count_includes_defaulters(self):
+        Settings.objects.create(max_violation_count=50)
+        today = timezone.localdate()
+        old_day = today - timedelta(days=2)
+        user_pass = self._create_pass(self.student_user_old, old_day)
+        NightPass.objects.filter(pass_id=user_pass.pass_id).update(
+            defaulter=True,
+            violation_code="MISSED_LIBRARY_IN",
+            defaulter_remarks="Missed scan",
+        )
+
+        response = self.client.get(reverse("admin_dashboard"), {"date": today.isoformat()})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["blocked_students"], 1)
+
 
 class ViolationThresholdBehaviorTests(TestCase):
     def setUp(self):
