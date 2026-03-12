@@ -1,4 +1,5 @@
-from django.core.cache import cache
+from datetime import timedelta
+
 from django.utils import timezone
 
 from ...users.models import Student
@@ -11,7 +12,7 @@ from .lifecycle import (
 )
 
 
-RECENT_SCAN_TTL_SECONDS = 300
+MINIMUM_SCAN_INTERVAL = timedelta(minutes=5)
 
 
 def _error(reason_code, message):
@@ -41,6 +42,19 @@ def _success_payload(student, user_pass, result):
         "user_pass": {"pass_id": user_pass.pk},
     })
     return result
+
+
+def _scan_interval_block(student, now):
+    if not student.last_scan_at:
+        return None
+
+    elapsed = now - student.last_scan_at
+    if elapsed < MINIMUM_SCAN_INTERVAL:
+        return _error(
+            "RECENT_SCAN_BLOCKED",
+            "Scan already recorded. Please wait 5 minutes before scanning again.",
+        )
+    return None
 
 
 def is_scan_window_open(now=None):
@@ -87,6 +101,10 @@ def process_scan(registration_number, user, now=None):
     except Student.DoesNotExist:
         return _error("STUDENT_NOT_FOUND", "Student not found.")
 
+    interval_block = _scan_interval_block(student, now)
+    if interval_block:
+        return interval_block
+
     user_pass = get_active_pass_for_user(student.user, now=now)
     if not user_pass:
         return _error("NO_ACTIVE_PASS", "No active pass found for this student.")
@@ -104,13 +122,6 @@ def process_scan(registration_number, user, now=None):
     if scanner_context["location"] == "HOSTEL" and scanner_context["hostel_id"] and student.hostel_id and scanner_context["hostel_id"] != student.hostel_id:
         return _error("WRONG_HOSTEL_SCANNER", "This student belongs to a different hostel scanner.")
 
-    recent_scan_key = f"recent-scan:{scanner_context['location']}:{student.registration_number}"
-    if cache.get(recent_scan_key):
-        return _error(
-            "RECENT_SCAN_BLOCKED",
-            "This ID was already scanned recently. Please wait 5 minutes before scanning again.",
-        )
-
     if user_pass.current_step == 0:
         result = transition_checkout_from_hostel(user_pass)
     elif user_pass.current_step == 1:
@@ -124,6 +135,7 @@ def process_scan(registration_number, user, now=None):
         return _error("INVALID_PASS_STATE", "Invalid pass state for scanning.")
 
     if result.get("status"):
-        cache.set(recent_scan_key, True, RECENT_SCAN_TTL_SECONDS)
+        student.last_scan_at = now
+        student.save(update_fields=["last_scan_at"])
         return _success_payload(student, user_pass, result)
     return result

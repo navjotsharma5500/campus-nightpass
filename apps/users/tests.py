@@ -197,8 +197,32 @@ class UnifiedNightPassPolicyTests(TestCase):
         self.student.refresh_from_db()
         user_pass.refresh_from_db()
         self.assertTrue(response["status"])
+        self.assertTrue(response.get("violation_occurred"))
+        self.assertIn("Violation Recorded", response.get("violation_message", ""))
         self.assertEqual(self.student.violation_flags, 1)
         self.assertEqual((user_pass.violation_code or "").count("LATE_LIBRARY_IN"), 1)
+
+
+    def test_second_scan_within_five_minutes_is_blocked_across_locations(self):
+        user_pass = self._create_pass(current_step=0)
+
+        first_response = process_scan(self.student.registration_number, self.hostel_scanner_user, now=self.now)
+        blocked_response = process_scan(
+            self.student.registration_number,
+            self.library_scanner_user,
+            now=self.now + timedelta(minutes=1),
+        )
+
+        user_pass.refresh_from_db()
+        self.student.refresh_from_db()
+        self.assertTrue(first_response["status"])
+        self.assertFalse(blocked_response["status"])
+        self.assertEqual(blocked_response["reason_code"], "RECENT_SCAN_BLOCKED")
+        self.assertEqual(
+            blocked_response["message"],
+            "Scan already recorded. Please wait 5 minutes before scanning again.",
+        )
+        self.assertEqual(self.student.last_scan_at, self.now)
 
     def test_deadline_evaluator_triggers_immediately_after_30_minute_deadline(self):
         user_pass = self._create_pass(current_step=1)
@@ -240,3 +264,6 @@ class UnifiedNightPassPolicyTests(TestCase):
 
         self.assertIsNone(active_pass)
         self.assertEqual(NightPass.objects.filter(user=self.student_user, valid=True).count(), 0)
+
+
+

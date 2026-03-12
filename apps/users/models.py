@@ -1,5 +1,3 @@
-#models.py inside of user.py 
-
 from datetime import datetime, time, timedelta
 from django.db import models
 from django.contrib.auth.models import AbstractUser
@@ -104,6 +102,7 @@ class Student(models.Model):
     hostel_checkout_time = models.DateTimeField(blank=True, null=True, editable=False)
     hostel_checkin_time = models.DateTimeField(blank=True, null=True, editable=False)
     last_checkout_time = models.DateTimeField(blank=True, null=True, editable=False)
+    last_scan_at = models.DateTimeField(blank=True, null=True, editable=False)
     violation_flags = models.IntegerField(default=0)
     user = models.OneToOneField(CustomUser, on_delete=models.CASCADE)
     email = models.EmailField(max_length=100, blank=True, null=True)
@@ -177,9 +176,7 @@ class NightPass(models.Model):
         if not self.pass_id:
             self.pass_id = f"PASS-{random.randint(1000, 99999)}"
 
-        # FORCE the pass_type to match the Resource setting during creation
         if self.campus_resource:
-            # Always sync pass_type with resource
             self.pass_type = self.campus_resource.default_pass_type
 
             if self._state.adding:
@@ -194,6 +191,8 @@ class NightPass(models.Model):
     def status_message(self):
         from .services.pass_policy import STEP_COMPLETED, STEP_HOSTEL_IN, STEP_HOSTEL_OUT, STEP_LIBRARY_IN, STEP_LIBRARY_OUT
 
+        if self.defaulter:
+            return "Violation Recorded"
         if not self.valid:
             return "Pass Closed" if self.current_step == STEP_COMPLETED else "Pass Expired"
 
@@ -247,4 +246,3 @@ def delete_image_from_imagekit(sender, instance, **kwargs):
         if response.status_code == 200 and response.json():
             fileId = response.json()[0]['fileId']
             requests.delete(f'https://api.imagekit.io/v1/files/{fileId}', auth=auth)
-

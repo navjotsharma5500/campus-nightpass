@@ -36,7 +36,7 @@ class SettingsAdmin(ExtraButtonsMixin, admin.ModelAdmin):
         CampusResource.objects.all().update(slots_booked=0, booking_complete=False, is_booking=False)
         evaluate_active_pass_deadlines()
         NightPass.objects.filter(date=date.today() - timedelta(days=1)).update(valid=False)
-        Student.objects.all().update(is_checked_in=True, last_checkout_time=None, hostel_checkin_time=None, hostel_checkout_time=None, has_booked=False)
+        Student.objects.all().update(is_checked_in=True, last_checkout_time=None, hostel_checkin_time=None, hostel_checkout_time=None, last_scan_at=None, has_booked=False)
         self.message_user(request, "Successfully executed: Nightpass reset")
         return HttpResponseRedirectToReferrer(request)
 
@@ -131,4 +131,5 @@ class SettingsAdmin(ExtraButtonsMixin, admin.ModelAdmin):
 
 
 admin.site.register(Settings, SettingsAdmin)
+
 

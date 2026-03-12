@@ -238,12 +238,12 @@ def get_dashboard_status(user_pass, max_violations=None, now=None):
     student = user_pass.user.student
     if max_violations is not None and student.violation_flags >= max_violations:
         return "Block"
+    if user_pass.defaulter:
+        return "Violation"
     if user_pass.valid and user_pass.date < timezone.localdate(now):
         return "Expired"
     if not user_pass.valid and user_pass.current_step != STEP_COMPLETED:
         return "Expired"
-    if user_pass.defaulter:
-        return "Violation"
 
     mapping = {
         STEP_HOSTEL_OUT: "Booked",
@@ -257,12 +257,12 @@ def get_dashboard_status(user_pass, max_violations=None, now=None):
 
 def get_scanner_status(user_pass, now=None):
     now = now or timezone.now()
+    if user_pass.defaulter:
+        return "Violation"
     if user_pass.valid and user_pass.date < timezone.localdate(now):
         return "Expired"
     if not user_pass.valid and user_pass.current_step != STEP_COMPLETED:
         return "Expired"
-    if user_pass.defaulter:
-        return "Violation"
 
     mapping = {
         STEP_HOSTEL_OUT: "Night Pass Approved",
@@ -272,3 +272,5 @@ def get_scanner_status(user_pass, now=None):
         STEP_COMPLETED: "Returned to Hostel",
     }
     return mapping.get(user_pass.current_step, "Night Pass Approved")
+
+

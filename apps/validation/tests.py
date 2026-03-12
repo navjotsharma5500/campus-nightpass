@@ -94,13 +94,19 @@ class AdminDashboardEnhancementTests(TestCase):
         self.assertContains(response, "Today Student")
         self.assertNotContains(response, "Old Student")
 
-    def test_dashboard_status_marks_unfinished_invalid_pass_as_expired(self):
+    def test_dashboard_status_keeps_violation_visible_after_expiry(self):
         yesterday = timezone.localdate() - timedelta(days=1)
         user_pass = self._create_pass(self.student_user_old, yesterday, current_step=3, valid=False)
+        NightPass.objects.filter(pass_id=user_pass.pass_id).update(
+            defaulter=True,
+            violation_code="LATE_HOSTEL_IN",
+            defaulter_remarks="Late Hostel IN",
+        )
+        user_pass.refresh_from_db()
 
         status = get_dashboard_status(user_pass, max_violations=3)
 
-        self.assertEqual(status, "Expired")
+        self.assertEqual(status, "Violation")
 
     def test_scanner_status_uses_unified_policy(self):
         today = timezone.localdate()
@@ -109,3 +115,4 @@ class AdminDashboardEnhancementTests(TestCase):
         status = get_scanner_status(user_pass)
 
         self.assertEqual(status, "Library IN")
+

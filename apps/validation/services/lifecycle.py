@@ -20,6 +20,13 @@ from ...users.services.pass_policy import (
 from ...users.services.violation_utils import append_violation
 
 
+VIOLATION_TOAST_MESSAGES = {
+    STEP_LIBRARY_IN: "Violation Recorded - Late Library IN detected.",
+    STEP_LIBRARY_OUT: "Violation Recorded - Late Library OUT detected.",
+    STEP_HOSTEL_IN: "Violation Recorded - Late Hostel IN detected.",
+}
+
+
 def _mark_violation(user_pass, student, step, remark, occurred_at=None):
     code = violation_code_for_step(step)
     if not code:
@@ -29,6 +36,13 @@ def _mark_violation(user_pass, student, step, remark, occurred_at=None):
     if added:
         student.violation_flags += 1
     return added
+
+
+def _violation_payload(step):
+    return {
+        "violation_occurred": True,
+        "violation_message": VIOLATION_TOAST_MESSAGES.get(step, "Violation Recorded - Late scan detected."),
+    }
 
 
 def transition_checkout_from_hostel(user_pass):
@@ -62,18 +76,18 @@ def transition_checkin_to_library(user_pass):
         transit_start = outside_library_in_start(user_pass)
         allowed_minutes = hostel_out_library_timer
 
-    violation_occurred = False
+    late_scan = False
     if transit_start:
         transit = now - transit_start
         if transit > timedelta(minutes=allowed_minutes):
-            violation_occurred = _mark_violation(
+            late_scan = True
+            if _mark_violation(
                 user_pass,
                 student,
                 STEP_LIBRARY_IN,
                 f"Violation: Library IN Late ({int(transit.total_seconds() // 60)} mins)",
                 occurred_at=now,
-            )
-            if violation_occurred:
+            ):
                 student.save(update_fields=["violation_flags"])
 
     user_pass.library_in_time = now
@@ -90,9 +104,8 @@ def transition_checkin_to_library(user_pass):
     )
 
     payload = {"status": True, "reason_code": "TRANSITION_APPLIED", "message": "Checked into Library."}
-    if violation_occurred:
-        payload["violation_occurred"] = True
-        payload["violation_message"] = "Violation occurred for late Library IN scan."
+    if late_scan:
+        payload.update(_violation_payload(STEP_LIBRARY_IN))
     return payload
 
 
@@ -105,16 +118,16 @@ def transition_checkout_from_library(user_pass):
     policy = resolve_active_policy(timezone.localdate(now))
     cutoff_at = library_out_cutoff_datetime(user_pass, policy=policy)
 
-    violation_occurred = False
+    late_scan = False
     if now > cutoff_at:
-        violation_occurred = _mark_violation(
+        late_scan = True
+        if _mark_violation(
             user_pass,
             student,
             STEP_LIBRARY_OUT,
             f"Violation: Library OUT Late (cutoff {get_library_out_cutoff_time(policy).strftime('%H:%M')})",
             occurred_at=now,
-        )
-        if violation_occurred:
+        ):
             student.save(update_fields=["violation_flags"])
 
     user_pass.library_out_time = now
@@ -131,9 +144,8 @@ def transition_checkout_from_library(user_pass):
     )
 
     payload = {"status": True, "reason_code": "TRANSITION_APPLIED", "message": "Library Exit recorded."}
-    if violation_occurred:
-        payload["violation_occurred"] = True
-        payload["violation_message"] = "Violation occurred for late Library OUT scan."
+    if late_scan:
+        payload.update(_violation_payload(STEP_LIBRARY_OUT))
     return payload
 
 
@@ -145,11 +157,12 @@ def transition_checkin_to_hostel(student):
     now = timezone.now()
     _, _, backend_timer = resolve_transit_timers(student, now=now)
 
-    violation_occurred = False
+    late_scan = False
     if user_pass.library_out_time:
         transit = now - user_pass.library_out_time
         if transit > timedelta(minutes=backend_timer):
-            violation_occurred = _mark_violation(
+            late_scan = True
+            _mark_violation(
                 user_pass,
                 student,
                 STEP_HOSTEL_IN,
@@ -178,7 +191,7 @@ def transition_checkin_to_hostel(student):
     )
 
     payload = {"status": True, "reason_code": "TRANSITION_APPLIED", "message": "Hostel Entry Success. Pass Closed."}
-    if violation_occurred:
-        payload["violation_occurred"] = True
-        payload["violation_message"] = "Violation occurred for late Hostel IN scan."
+    if late_scan:
+        payload.update(_violation_payload(STEP_HOSTEL_IN))
     return payload
+
