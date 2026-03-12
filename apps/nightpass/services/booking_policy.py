@@ -1,8 +1,8 @@
 from datetime import date
 from django.utils import timezone
 
-from ...global_settings.models import Settings
 from ...users.models import NightPass
+from ...users.services.pass_policy import resolve_active_policy
 
 
 def _response(reason_code, message):
@@ -20,7 +20,7 @@ def _format_booking_time(value):
 
 
 def validate_booking_policy(student, campus_resource):
-    policy = Settings.current()
+    policy = resolve_active_policy()
     if not policy:
         return _response("NO_ACTIVE_POLICY", "No active booking policy found.")
 

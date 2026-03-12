@@ -113,7 +113,9 @@ class Student(models.Model):
 
     @property
     def status(self):
-        active_pass = NightPass.objects.filter(user=self.user, valid=True).order_by('-pass_id').first()
+        from .services.pass_policy import get_active_pass_for_user
+
+        active_pass = get_active_pass_for_user(self.user)
         if not active_pass:
             return "Inside Hostel" if self.is_checked_in else "In Transit"
         return active_pass.status_message
@@ -190,39 +192,48 @@ class NightPass(models.Model):
 
     @property
     def status_message(self):
-        # 1. FAIL-SAFE: If the resource itself is set to OUTSIDE, 
-        # ignore the step logic and show the Library message.
+        from .services.pass_policy import STEP_COMPLETED, STEP_HOSTEL_IN, STEP_HOSTEL_OUT, STEP_LIBRARY_IN, STEP_LIBRARY_OUT
+
+        if not self.valid:
+            return "Pass Closed" if self.current_step == STEP_COMPLETED else "Pass Expired"
+
         if self.pass_type == 'OUTSIDE' or self.campus_resource.default_pass_type == 'OUTSIDE':
-            if not self.library_in_time:
+            if self.current_step == STEP_LIBRARY_IN and not self.library_in_time:
+                return "Proceed to Library IN"
+            if self.current_step == STEP_LIBRARY_OUT:
+                return f"Currently in {self.campus_resource.name}"
+            if self.current_step == STEP_HOSTEL_IN:
+                return "In Transit: Returning to Hostel"
+            if self.current_step == STEP_COMPLETED:
+                return "Pass Completed"
+
+        if self.current_step == STEP_HOSTEL_OUT:
+            return "Scan from Caretaker to activate"
+        if self.current_step == STEP_LIBRARY_IN:
+            return f"In Transit: Head to {self.campus_resource.name}"
+        if self.current_step == STEP_LIBRARY_OUT:
+            return f"Currently in {self.campus_resource.name}"
+        if self.current_step == STEP_HOSTEL_IN:
+            return "In Transit: Returning to Hostel"
+        return "Pass Completed"
+
+    def is_late_in_transit(self):
+        from .services.pass_policy import STEP_HOSTEL_IN, STEP_LIBRARY_IN, resolve_transit_timers
+
+        now = timezone.now()
+        student = self.user.student
+        frontend_timer, hostel_out_library_timer, backend_timer = resolve_transit_timers(student, now=now)
+        if self.current_step == STEP_LIBRARY_IN:
+            allowed_minutes = hostel_out_library_timer if self.pass_type == 'OUTSIDE' else frontend_timer
+            start_at = self.hostel_checkout_time
+            if self.pass_type == 'OUTSIDE':
                 start_at = timezone.make_aware(
                     datetime.combine(self.date, time(20, 0)),
                     timezone.get_current_timezone(),
                 )
-                if timezone.now() >= start_at:
-                    return "Library IN"
-                return "Library IN starts at 8:00 PM"
-            if self.library_in_time and not self.library_out_time:
-                return f"Currently inside {self.campus_resource.name}"
-            return "In Transit: Returning to Hostel"
-
-        # 2. Standard Hostel Logic (5-scan system)
-        if self.current_step == 0:
-            return "Scan from Caretaker to activate"
-        elif self.current_step == 1:
-            return f"In Transit: Head to {self.campus_resource.name}"
-        elif self.current_step == 2:
-            return f"Currently in {self.campus_resource.name}"
-        elif self.current_step == 3:
-            return "In Transit: Returning to Hostel"
-        
-        return "Pass Completed"
-
-    def is_late_in_transit(self):
-        now = timezone.now()
-        if self.current_step == 1 and self.hostel_checkout_time:
-            return now > (self.hostel_checkout_time + timedelta(minutes=15))
-        if self.current_step == 3 and self.library_out_time:
-            return now > (self.library_out_time + timedelta(minutes=15))
+            return bool(start_at and now > (start_at + timedelta(minutes=allowed_minutes)))
+        if self.current_step == STEP_HOSTEL_IN and self.library_out_time:
+            return now > (self.library_out_time + timedelta(minutes=backend_timer))
         return False
 
 @receiver(post_delete, sender=Student)
@@ -236,3 +247,4 @@ def delete_image_from_imagekit(sender, instance, **kwargs):
         if response.status_code == 200 and response.json():
             fileId = response.json()[0]['fileId']
             requests.delete(f'https://api.imagekit.io/v1/files/{fileId}', auth=auth)
+

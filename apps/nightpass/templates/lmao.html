@@ -65,7 +65,7 @@
                             </button>
                         {% else %}
                             <button class="book-button gray" disabled>
-                                Booking time 10am - 8pm
+                                Booking closed right now
                             </button>
                         {% endif %}
                     {% endif %}
@@ -98,7 +98,7 @@
     "pass_date": "{{ user_pass.date|date:'Y-m-d'|default:'' }}",
     "hostel_checkout_time": "{{ user_pass.hostel_checkout_time|date:'c'|default:'' }}",
     "library_out_time": "{{ user_pass.library_out_time|date:'c'|default:'' }}",
-    "transit_timer_minutes": {{ transit_timer_minutes|default:40 }}
+    "transit_timer_minutes": {{ transit_timer_minutes|default:30 }}
 }
 </script>
 
@@ -193,7 +193,7 @@ function checkStatusUpdate() {
 // Start polling
 setInterval(checkStatusUpdate, 5000); 
 
-/* BARCODE & 40-MINUTE TIMERS */
+/* BARCODE & TRANSIT TIMERS */
 document.addEventListener("DOMContentLoaded", function () {
     const dataElement = document.getElementById("user-pass-data");
     const passData = dataElement ? JSON.parse(dataElement.textContent) : null;
@@ -216,7 +216,7 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
-    // Logic for 40-Minute Transit Timer
+    // Logic for transit timer
     if (passData && (passData.current_step === 1 || passData.current_step === 3)) {
         let transitStart = null;
         if (passData.current_step === 1 && passData.pass_type === "OUTSIDE") {
@@ -261,3 +261,4 @@ document.addEventListener("DOMContentLoaded", function () {
 });
 </script>
 {% endblock %}
+

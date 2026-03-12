@@ -1,15 +1,16 @@
 from django.db import models
 
-class Settings(models.Model):
 
+class Settings(models.Model):
     enable_hostel_limits = models.BooleanField(default=False, help_text="Limit the number of students eligible for a particular hostel. Limit can be set from Hostel profile.")
     enable_hostel_timers = models.BooleanField(default=False, help_text="Enabling activates the time limits specified in the Hostel profile. The timers below, however, will not be operational.")
-    frontend_checkin_timer = models.IntegerField(blank=True, null=True, default=0)
-    library_timer_for_hostel_out = models.IntegerField(blank=True, null=True, default=0)
-    backend_checkin_timer = models.IntegerField(blank=True, null=True, default=0)
+    frontend_checkin_timer = models.IntegerField(blank=True, null=True, default=30)
+    library_timer_for_hostel_out = models.IntegerField(blank=True, null=True, default=30)
+    backend_checkin_timer = models.IntegerField(blank=True, null=True, default=30)
     scan_start_time = models.TimeField(blank=True, null=True, help_text="Scanner start time window.")
     scan_end_time = models.TimeField(blank=True, null=True, help_text="Scanner end time window.")
     library_out_cutoff_time = models.TimeField(blank=True, null=True, help_text="Library OUT cutoff time. Students still inside library after this time are marked defaulter.")
+    slot_cancel_timer = models.TimeField(blank=True, null=True, help_text="Last allowed time for slot cancellation or modification.")
 
     last_out_from_hostel = models.TimeField(blank=True, null=True, verbose_name="Last Out From Hostel")
 

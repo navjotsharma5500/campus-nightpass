@@ -26,9 +26,11 @@
                 {% if selected_student %}<input type="hidden" name="student" value="{{ selected_student.registration_number }}">{% endif %}
                 <button type="submit" class="secondary-btn">Apply</button>
             </form>
+            {% if can_manage_admin %}
             <a href="{% url 'analytics' %}?from_date={{ selected_date }}&to_date={{ selected_date }}" class="secondary-btn">
                 View Analytics
             </a>
+            {% endif %}
             <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#4b5563;">
                 <input id="auto-refresh-toggle" type="checkbox">
                 Auto refresh 20s
@@ -39,37 +41,37 @@
 
     <div class="summary-cards">
 
-        <a href="{% url 'dashboard_detail' 'active-checkins' %}?date={{ selected_date }}" class="card">
+        <a href="{% if can_manage_admin %}{% url 'dashboard_detail' 'active-checkins' %}?date={{ selected_date }}{% else %}javascript:void(0){% endif %}" class="card">
             <div class="card-title">🟢 Active Check-ins</div>
             <div class="card-value">{{ active_checkins }}</div>
             <div class="card-sub">Currently in library</div>
         </a>
 
-        <a href="{% url 'dashboard_detail' 'active-passes' %}?date={{ selected_date }}" class="card">
+        <a href="{% if can_manage_admin %}{% url 'dashboard_detail' 'active-passes' %}?date={{ selected_date }}{% else %}javascript:void(0){% endif %}" class="card">
             <div class="card-title">📌 Active Passes</div>
             <div class="card-value">{{ active_passes }}</div>
             <div class="card-sub">Open journeys</div>
         </a>
 
-        <a href="{% url 'dashboard_detail' 'voilation' %}?date={{ selected_date }}" class="card danger-card">
+        <a href="{% if can_manage_admin %}{% url 'dashboard_detail' 'voilation' %}?date={{ selected_date }}{% else %}javascript:void(0){% endif %}" class="card danger-card">
             <div class="card-title">🔴 Students Violation</div>
             <div class="card-value">{{ violation_count }}</div>
             <div class="card-sub">Violations today</div>
         </a>
 
-        <a href="{% url 'dashboard_detail' 'in-transit' %}?date={{ selected_date }}" class="card">
+        <a href="{% if can_manage_admin %}{% url 'dashboard_detail' 'in-transit' %}?date={{ selected_date }}{% else %}javascript:void(0){% endif %}" class="card">
             <div class="card-title">🚌 In Transit</div>
             <div class="card-value">{{ in_transit }}</div>
             <div class="card-sub">Between scan points</div>
         </a>
 
-        <a href="{% url 'dashboard_detail' 'completed-today' %}?date={{ selected_date }}" class="card">
+        <a href="{% if can_manage_admin %}{% url 'dashboard_detail' 'completed-today' %}?date={{ selected_date }}{% else %}javascript:void(0){% endif %}" class="card">
             <div class="card-title">✅ Completed Today</div>
             <div class="card-value">{{ completed_today }}</div>
             <div class="card-sub">Closed passes</div>
         </a>
 
-        <a href="{% url 'dashboard_detail' 'blocked-students' %}?date={{ selected_date }}" class="card danger-card">
+        <a href="{% if can_manage_admin %}{% url 'dashboard_detail' 'blocked-students' %}?date={{ selected_date }}{% else %}javascript:void(0){% endif %}" class="card danger-card">
             <div class="card-title">⛔ Blocked Students</div>
             <div class="card-value">{{ blocked_students }}</div>
             <div class="card-sub">Reached max violations</div>
@@ -96,7 +98,7 @@
                 <input type="text" name="q" value="{{ search_term }}" placeholder="Search by roll no, student name, or email">
                 <button type="submit" class="secondary-btn">Search Student</button>
             </form>
-            <a class="secondary-btn" href="{% url 'download_admin_table_excel' %}?scope=activity&date={{ selected_date }}&activity={{ activity_tab }}">Download This Table</a>
+            {% if can_manage_admin %}<a class="secondary-btn" href="{% url 'download_admin_table_excel' %}?scope=activity&date={{ selected_date }}&activity={{ activity_tab }}">Download This Table</a>{% endif %}
         </div>
 
         <table>
@@ -148,7 +150,7 @@
         {% if search_term %}
         <div class="top-head">
             <h3>SEARCH RESULTS</h3>
-            <a class="secondary-btn" href="{% url 'download_admin_table_excel' %}?scope=student_search&q={{ search_term }}">Download Results</a>
+            {% if can_manage_admin %}<a class="secondary-btn" href="{% url 'download_admin_table_excel' %}?scope=student_search&q={{ search_term }}">Download Results</a>{% endif %}
         </div>
         <table>
             <thead>
@@ -181,7 +183,7 @@
         {% if selected_student %}
         <div class="top-head">
             <h3>STUDENT ACTIVITY TIMELINE: {{ selected_student.name }} ({{ selected_student.registration_number }})</h3>
-            <a class="secondary-btn" href="{% url 'download_admin_table_excel' %}?scope=student_activity&student={{ selected_student.registration_number }}">Download Timeline</a>
+            {% if can_manage_admin %}<a class="secondary-btn" href="{% url 'download_admin_table_excel' %}?scope=student_activity&student={{ selected_student.registration_number }}">Download Timeline</a>{% endif %}
         </div>
         <table>
             <thead>

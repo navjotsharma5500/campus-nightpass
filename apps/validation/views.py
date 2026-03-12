@@ -22,9 +22,8 @@ from ..users.models import NightPass, Student
 from ..users.services.violation_utils import violation_codes
 from ..nightpass.models import CampusResource, Hostel
 from ..global_settings.models import Settings
-from .services.scan_service import process_scan, scanner_location_label, get_scan_window
-
-TRANSIT_LIMIT_MINUTES = 40
+from .services.scan_service import process_scan, scanner_location_label
+from ..users.services.pass_policy import get_active_pass_for_user, get_dashboard_status, get_scan_window, get_scanner_status
 
 
 # ---------------------------------------------------------
@@ -35,62 +34,37 @@ def json_response(data):
     return HttpResponse(json.dumps(data, default=str), content_type="application/json")
 
 
+DASHBOARD_VIEW_ONLY_GROUP = "dashboard_view_only"
+
+
 def is_admin(user):
     return user.is_superuser or getattr(user, "user_type", None) == "admin"
+
+
+def can_view_admin_dashboard(user):
+    if is_admin(user):
+        return True
+    if getattr(user, "user_type", None) != "security":
+        return False
+    return user.groups.filter(name=DASHBOARD_VIEW_ONLY_GROUP).exists()
 
 
 def is_scanner(user):
     return getattr(user, "user_type", None) == "security"
 
 
-def _dashboard_step_label(user_pass):
-    mapping = {
-        0: "Booked",
-        1: "Hostel Out",
-        2: "Library IN",
-        3: "Library Out",
-        4: "Hostel IN",
-    }
-    return mapping.get(user_pass.current_step, "Booked")
-
 
 def _format_pass_for_dashboard(user_pass, max_violations):
-    student = user_pass.user.student
-    if student.violation_flags >= max_violations:
-        dashboard_status = "Block"
-    elif user_pass.defaulter:
-        dashboard_status = "Violation"
-    else:
-        dashboard_status = _dashboard_step_label(user_pass)
-
-    user_pass.dashboard_status = dashboard_status
+    user_pass.dashboard_status = get_dashboard_status(user_pass, max_violations=max_violations)
     user_pass.violation_codes_display = ", ".join(violation_codes(user_pass)) or "-"
     return user_pass
 
 
-def _scanner_pass_type_label(user_pass):
-    return "Hostel Out" if user_pass.pass_type == "OUTSIDE" else "Library"
-
-
-def _scanner_status_label(user_pass):
-    if user_pass.defaulter:
-        return "Violation"
-
-    mapping = {
-        0: "Night Pass Approved",
-        1: "Hostel OUT",
-        2: "Library IN",
-        3: "Library OUT",
-        4: "Returned to Hostel",
-    }
-    return mapping.get(user_pass.current_step, "Night Pass Approved")
-
 
 def _format_pass_for_scanner(user_pass):
-    user_pass.pass_type_label = _scanner_pass_type_label(user_pass)
-    user_pass.scanner_status = _scanner_status_label(user_pass)
+    user_pass.pass_type_label = "Outside Hostel" if user_pass.pass_type == "OUTSIDE" else "Hostel"
+    user_pass.scanner_status = get_scanner_status(user_pass)
     return user_pass
-
 
 def _parse_dashboard_date(request):
     selected_date = parse_date((request.GET.get("date") or "").strip())
@@ -177,100 +151,6 @@ def req_library_logs(registration_number):
 
 
 # ---------------------------------------------------------
-# STEP SYSTEM LOGIC
-# ---------------------------------------------------------
-
-def checkout_from_hostel(user_pass):
-    if user_pass.current_step != 0:
-        return json_response({'status': False, 'message': 'Invalid step for Hostel Exit.'})
-
-    now = timezone.now()
-    student = user_pass.user.student
-
-    student.is_checked_in = False
-    user_pass.hostel_checkout_time = now
-    user_pass.current_step = 1
-
-    student.save()
-    user_pass.save()
-
-    return json_response({'status': True, 'message': 'Hostel Exit Authorized.'})
-
-
-def checkin_to_location(user_pass, campus_resource):
-    if user_pass.current_step != 1:
-        return json_response({'status': False, 'message': 'Exit hostel first.'})
-
-    now = timezone.now()
-
-    # 15 minute transit check
-    if user_pass.hostel_checkout_time:
-        transit = now - user_pass.hostel_checkout_time
-        if transit > timedelta(minutes=TRANSIT_LIMIT_MINUTES):
-            was_defaulter = bool(user_pass.defaulter)
-            user_pass.defaulter = True
-            user_pass.defaulter_remarks = f"Late arrival ({transit.seconds // 60} mins)"
-            student = user_pass.user.student
-            if not was_defaulter:
-                student.violation_flags += 1
-                student.save()
-
-    user_pass.library_in_time = now
-    user_pass.current_step = 2
-    user_pass.save()
-
-    return json_response({'status': True, 'message': f'Checked into {"Library"}'})
-
-
-def checkout_from_location(user_pass, campus_resource):
-    if user_pass.current_step != 2:
-        return json_response({'status': False, 'message': 'Student not inside resource.'})
-
-    now = timezone.now()
-
-    user_pass.library_out_time = now
-    user_pass.current_step = 3
-    user_pass.save()
-
-    return json_response({'status': True, 'message': 'Resource Exit recorded.'})
-
-
-def checkin_to_hostel(student):
-    user_pass = NightPass.objects.filter(user=student.user, valid=True).first()
-
-    if not user_pass or user_pass.current_step != 3:
-        return json_response({'status': False, 'message': 'Must exit resource first.'})
-
-    now = timezone.now()
-
-    if user_pass.library_out_time:
-        transit = now - user_pass.library_out_time
-        if transit > timedelta(minutes=TRANSIT_LIMIT_MINUTES):
-            was_defaulter = bool(user_pass.defaulter)
-            user_pass.defaulter = True
-            remark = f"Late return ({transit.seconds // 60} mins)"
-            user_pass.defaulter_remarks = (
-                (user_pass.defaulter_remarks + " | " + remark)
-                if user_pass.defaulter_remarks else remark
-            )
-            if not was_defaulter:
-                student.violation_flags += 1
-
-    student.is_checked_in = True
-    student.hostel_checkin_time = now
-    student.has_booked = False
-
-    user_pass.hostel_checkin_time = now
-    user_pass.current_step = 4
-    user_pass.valid = False
-
-    student.save()
-    user_pass.save()
-
-    return json_response({'status': True, 'message': 'Hostel Entry Success. Pass Closed.'})
-
-
-# ---------------------------------------------------------
 # AUTO SCAN + AUTO CHECKIN / CHECKOUT
 # ---------------------------------------------------------
 @csrf_exempt
@@ -351,7 +231,7 @@ def scanner(request):
 # ---------------------------------------------------------
 
 
-@user_passes_test(is_admin)
+@user_passes_test(can_view_admin_dashboard)
 def admin_dashboard(request):
     selected_date = _parse_dashboard_date(request)
     policy = Settings.current()
@@ -408,6 +288,7 @@ def admin_dashboard(request):
         "selected_student": selected_student,
         "student_timeline": student_timeline,
         "blocked_on_selected": blocked_on_selected,
+        "can_manage_admin": is_admin(request.user),
     }
 
     return render(request, "nightpass/admin_dashboard.html", context)
@@ -832,10 +713,13 @@ def get_status_json(request):
     It tells the phone what the current step is in the database.
     """
     
-    user_pass = NightPass.objects.filter(user=request.user, valid=True).first()
+    user_pass = get_active_pass_for_user(request.user)
     
     if user_pass:
         return JsonResponse({'current_step': user_pass.current_step})
     
     # Return -1 if no pass exists (e.g., it was just closed/finished)
     return JsonResponse({'current_step': -1})
+
+
+

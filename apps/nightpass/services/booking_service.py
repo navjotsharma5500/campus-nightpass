@@ -3,8 +3,10 @@ import random
 import string
 
 from django.db import transaction
+from django.utils import timezone
 
 from ...users.models import NightPass
+from ...users.services.pass_policy import get_active_pass_for_user
 from .booking_policy import validate_booking_policy
 
 
@@ -12,23 +14,21 @@ def _response(reason_code, message):
     return {"status": False, "reason_code": reason_code, "message": message}
 
 
-def _existing_pass_blocker(user):
-    user_pass = NightPass.objects.filter(user=user, date=date.today()).first()
-    if not user_pass:
+def _existing_pass_blocker(user, now=None):
+    active_pass = get_active_pass_for_user(user, now=now)
+    if not active_pass:
         return None
 
-    if user_pass.valid:
-        if user_pass.hostel_checkout_time:
-            return _response(
-                "ACTIVE_PASS_IN_USE",
-                f"New slot can be booked once you exit {user_pass.campus_resource}.",
-            )
+    if active_pass.hostel_checkout_time or active_pass.library_in_time or active_pass.library_out_time:
         return _response(
-            "ACTIVE_PASS_EXISTS",
-            f"Cancel the booking for {user_pass.campus_resource} to book a new slot!",
+            "ACTIVE_PASS_IN_USE",
+            f"New slot can be booked only after the current pass for {active_pass.campus_resource} is closed.",
         )
 
-    return _response("PASS_ALREADY_GENERATED_TODAY", "Pass already generated for today!")
+    return _response(
+        "ACTIVE_PASS_EXISTS",
+        f"Cancel the booking for {active_pass.campus_resource} to book a new slot!",
+    )
 
 
 def _generate_pass_id():
@@ -40,7 +40,9 @@ def _generate_pass_id():
 
 @transaction.atomic
 def create_pass_for_student(user, campus_resource):
-    blocker = _existing_pass_blocker(user)
+    now = timezone.localtime(timezone.now())
+
+    blocker = _existing_pass_blocker(user, now=now)
     if blocker:
         return blocker
 
@@ -58,7 +60,7 @@ def create_pass_for_student(user, campus_resource):
         pass_id=_generate_pass_id(),
         user=user,
         date=date.today(),
-        start_time=datetime.now(),
+        start_time=now.time(),
         end_time=pass_expiry,
         valid=True,
     )

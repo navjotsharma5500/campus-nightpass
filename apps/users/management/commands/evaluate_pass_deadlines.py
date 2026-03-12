@@ -4,7 +4,7 @@ from ...services.deadline_evaluator import evaluate_active_pass_deadlines
 
 
 class Command(BaseCommand):
-    help = "Evaluate active passes for missed deadlines and expire defaulters."
+    help = "Evaluate active passes for missed deadlines and expire stale passes."
 
     def handle(self, *args, **options):
         summary = evaluate_active_pass_deadlines()
@@ -13,6 +13,7 @@ class Command(BaseCommand):
                 "Deadline evaluation complete | "
                 f"expired={summary['expired_passes']}, "
                 f"missed_library_in={summary['missed_library_in']}, "
+                f"missed_library_out={summary['missed_library_out']}, "
                 f"missed_hostel_in={summary['missed_hostel_in']}"
             )
         )

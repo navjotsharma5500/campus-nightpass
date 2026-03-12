@@ -22,3 +22,7 @@ def append_violation(user_pass, code, message, occurred_at=None):
 
 def violation_codes(user_pass):
     return [item for item in (user_pass.violation_code or "").split("|") if item]
+
+
+def violation_count(user_pass):
+    return len(violation_codes(user_pass))

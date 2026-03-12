@@ -1,71 +1,69 @@
-from django.contrib import admin
-from django.contrib import messages
-from django.http import HttpResponseRedirect
-from django.urls import reverse
-from django.db import transaction
-from django.db.models import Count
-from django.template.response import TemplateResponse
-from urllib.parse import parse_qs, urlparse
-from .models import Settings
-from ..nightpass.models import CampusResource
-from ..users.models import Student, NightPass
-from ..users.management.commands.check_defaulters import check_defaulters
-from ..users.management.commands.check_defaulter_no_checkin import check_defaulters_no_checkin
-from ..users.services.deadline_evaluator import evaluate_active_pass_deadlines
 from datetime import date, datetime, timedelta
+from urllib.parse import parse_qs, urlparse
 
 from admin_extra_buttons.api import ExtraButtonsMixin, button
 from admin_extra_buttons.utils import HttpResponseRedirectToReferrer
+from django.contrib import admin, messages
+from django.db import transaction
+from django.http import HttpResponseRedirect
+from django.template.response import TemplateResponse
+from django.urls import reverse
+
+from ..nightpass.models import CampusResource
+from ..users.models import NightPass, Student
+from ..users.services.deadline_evaluator import evaluate_active_pass_deadlines
+from ..users.services.violation_utils import violation_count
+from .models import Settings
 
 
 class SettingsAdmin(ExtraButtonsMixin, admin.ModelAdmin):
-    list_display = ('pk','enable_hostel_limits', 'enable_hostel_timers','enable_gender_ratio','enable_yearwise_limits')
+    list_display = ('pk', 'enable_hostel_limits', 'enable_hostel_timers', 'enable_gender_ratio', 'enable_yearwise_limits')
 
     @button(html_attrs={'style': 'background-color:#88FF88;color:black'})
     def start_booking(self, request):
         CampusResource.objects.all().update(is_booking=True, booking_complete=False)
         self.message_user(request, "Successfully executed: Start booking")
         return HttpResponseRedirectToReferrer(request)
-    
+
     @button(html_attrs={'style': 'background-color:#fffd8d;color:black'})
     def stop_booking(self, request):
         CampusResource.objects.all().update(is_booking=False, booking_complete=True)
         self.message_user(request, "Successfully executed: Stop booking")
         return HttpResponseRedirectToReferrer(request)
-    
+
     @button(html_attrs={'style': 'background-color:#DC6C6C;color:black'})
     def reset_nightpass(self, request):
-        CampusResource.objects.all().update(slots_booked=0, booking_complete=False, is_booking = False)
-        NightPass.objects.filter(date=date.today()-timedelta(days=1)).update(valid=False)
+        CampusResource.objects.all().update(slots_booked=0, booking_complete=False, is_booking=False)
+        evaluate_active_pass_deadlines()
+        NightPass.objects.filter(date=date.today() - timedelta(days=1)).update(valid=False)
         Student.objects.all().update(is_checked_in=True, last_checkout_time=None, hostel_checkin_time=None, hostel_checkout_time=None, has_booked=False)
         self.message_user(request, "Successfully executed: Nightpass reset")
-        return HttpResponseRedirectToReferrer(request)
-    
-    @button()
-    def check_defaulters(self, request):
-        check_defaulters()
-        self.message_user(request, "Successfully executed: Check defaulters")
-        return HttpResponseRedirectToReferrer(request)
-    
-    @button()
-    def check_defaulters_no_checkin(self, request):
-        check_defaulters_no_checkin()
-        self.message_user(request, "Successfully executed: Check defaulters without checkin")
-        return HttpResponseRedirectToReferrer(request)
-    
-    @button()
-    def force_violation_count(self, request):
-        students = Student.objects.all()
-        for student in students:
-            student.violation_flags=NightPass.objects.filter(user=student.user, defaulter=True).count()
-            student.save()
-        self.message_user(request, "Successfully executed: Reset violation count")
         return HttpResponseRedirectToReferrer(request)
 
     @button()
     def evaluate_deadlines(self, request):
-        evaluate_active_pass_deadlines()
-        self.message_user(request, "Successfully executed: Evaluate pass deadlines")
+        summary = evaluate_active_pass_deadlines()
+        self.message_user(
+            request,
+            (
+                "Successfully executed: Evaluate pass deadlines "
+                f"(expired={summary['expired_passes']}, library_in={summary['missed_library_in']}, "
+                f"library_out={summary['missed_library_out']}, hostel_in={summary['missed_hostel_in']})"
+            ),
+        )
+        return HttpResponseRedirectToReferrer(request)
+
+    @button()
+    def force_violation_count(self, request):
+        students = Student.objects.select_related('user').all()
+        for student in students:
+            total = 0
+            for user_pass in NightPass.objects.filter(user=student.user):
+                total += violation_count(user_pass)
+            if student.violation_flags != total:
+                student.violation_flags = total
+                student.save(update_fields=["violation_flags"])
+        self.message_user(request, "Successfully executed: Recalculated violation count from unified policy")
         return HttpResponseRedirectToReferrer(request)
 
     @button(html_attrs={'style': 'background-color:#dbeafe;color:black'})
@@ -101,56 +99,36 @@ class SettingsAdmin(ExtraButtonsMixin, admin.ModelAdmin):
                 raw_date = (parse_qs(urlparse(referer).query).get("normalize_date", [""])[0] or "").strip()
         if not raw_date:
             return render_input()
-        target_date = date.today()
         parsed = None
-        if raw_date:
-            for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%Y/%m/%d"):
-                try:
-                    parsed = datetime.strptime(raw_date, fmt).date()
-                    break
-                except ValueError:
-                    continue
+        for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%Y/%m/%d"):
+            try:
+                parsed = datetime.strptime(raw_date, fmt).date()
+                break
+            except ValueError:
+                continue
         if not parsed:
             self.message_user(request, "Invalid date. Use YYYY-MM-DD, DD-MM-YYYY, DD/MM/YYYY, or YYYY/MM/DD.", level=messages.ERROR)
             return render_input()
         target_date = parsed
 
         with transaction.atomic():
-            rows = list(
-                NightPass.objects.filter(date=target_date, defaulter=True)
-                .values("user")
-                .annotate(date_defaulters=Count("pass_id"))
-            )
-
+            students = Student.objects.select_for_update().select_related("user")
             updated_students = 0
-            for row in rows:
-                student = Student.objects.select_for_update().filter(user_id=row["user"]).first()
-                if not student:
-                    continue
-                date_defaulters = int(row["date_defaulters"] or 0)
-                if date_defaulters <= 0:
-                    continue
-                previous_count = NightPass.objects.filter(
-                    user_id=row["user"],
-                    defaulter=True,
-                ).exclude(date=target_date).count()
-                normalized_total = previous_count + 1
-                if normalized_total != student.violation_flags:
-                    student.violation_flags = normalized_total
+            for student in students:
+                total = 0
+                for user_pass in NightPass.objects.filter(user=student.user):
+                    total += violation_count(user_pass)
+                if student.violation_flags != total:
+                    student.violation_flags = total
                     student.save(update_fields=["violation_flags"])
                     updated_students += 1
 
-            updated_passes = NightPass.objects.filter(date=target_date, defaulter=True).update(
-                defaulter=False,
-                defaulter_remarks="",
-                violation_code=None,
-                violation_time=None,
-            )
-
         self.message_user(
             request,
-            f"Normalization applied for {target_date.isoformat()}. Students normalized: {updated_students}. Defaulter passes cleared: {updated_passes}.",
+            f"Normalization applied for {target_date.isoformat()}. Students recalculated: {updated_students}.",
         )
         return HttpResponseRedirectToReferrer(request)
-# Register your models here.
+
+
 admin.site.register(Settings, SettingsAdmin)
+

@@ -1,12 +1,9 @@
-from datetime import time
 from django.core.cache import cache
 from django.utils import timezone
 
-from ...users.models import NightPass, Student
-from ...global_settings.models import Settings
+from ...users.models import Student
+from ...users.services.pass_policy import get_active_pass_for_user, get_scan_window, required_location, step_label
 from .lifecycle import (
-    required_location,
-    step_label,
     transition_checkout_from_hostel,
     transition_checkin_to_library,
     transition_checkout_from_library,
@@ -14,8 +11,6 @@ from .lifecycle import (
 )
 
 
-DEFAULT_SCAN_START_TIME = time(20, 0)
-DEFAULT_SCAN_END_TIME = time(22, 30)
 RECENT_SCAN_TTL_SECONDS = 300
 
 
@@ -31,27 +26,6 @@ def _is_within_window(current_time, start_time, end_time):
     if start_time <= end_time:
         return start_time <= current_time <= end_time
     return current_time >= start_time or current_time <= end_time
-
-
-def _resolve_active_policy(current_date=None):
-    current_date = current_date or timezone.localdate()
-    queryset = Settings.objects.all().order_by("-pk")
-
-    model_fields = {field.name for field in Settings._meta.get_fields()}
-    if {"start_date", "end_date"}.issubset(model_fields):
-        active = queryset.filter(start_date__lte=current_date, end_date__gte=current_date).first()
-        if active:
-            return active
-    return queryset.first()
-
-
-def get_scan_window(now=None):
-    now = now or timezone.now()
-    policy = _resolve_active_policy(timezone.localdate(now))
-
-    start = policy.scan_start_time if policy and policy.scan_start_time else DEFAULT_SCAN_START_TIME
-    end = policy.scan_end_time if policy and policy.scan_end_time else DEFAULT_SCAN_END_TIME
-    return start, end
 
 
 def _success_payload(student, user_pass, result):
@@ -113,7 +87,7 @@ def process_scan(registration_number, user, now=None):
     except Student.DoesNotExist:
         return _error("STUDENT_NOT_FOUND", "Student not found.")
 
-    user_pass = NightPass.objects.filter(user=student.user, valid=True).first()
+    user_pass = get_active_pass_for_user(student.user, now=now)
     if not user_pass:
         return _error("NO_ACTIVE_PASS", "No active pass found for this student.")
 

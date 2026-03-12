@@ -1,107 +1,38 @@
-from datetime import datetime, time, timedelta
+from datetime import timedelta
+
 from django.utils import timezone
 
-from ...global_settings.models import Settings
+from ...users.services.pass_policy import (
+    STEP_COMPLETED,
+    STEP_HOSTEL_IN,
+    STEP_HOSTEL_OUT,
+    STEP_LIBRARY_IN,
+    STEP_LIBRARY_OUT,
+    get_library_out_cutoff_time,
+    library_out_cutoff_datetime,
+    outside_library_in_start,
+    required_location,
+    resolve_active_policy,
+    resolve_transit_timers,
+    step_label,
+    violation_code_for_step,
+)
 from ...users.services.violation_utils import append_violation
 
 
-STEP_LABELS = {
-    0: "Hostel Out",
-    1: "Library In",
-    2: "Library Out",
-    3: "Hostel In",
-}
+def _mark_violation(user_pass, student, step, remark, occurred_at=None):
+    code = violation_code_for_step(step)
+    if not code:
+        return False
 
-DEFAULT_TRANSIT_LIMIT_MINUTES = 40
-OUTSIDE_LIBRARY_IN_START = time(20, 0)
-DEFAULT_HOSTEL_OUT_LIBRARY_TIMER_MINUTES = 40
-
-
-def required_location(user_pass):
-    if user_pass.pass_type == "OUTSIDE":
-        mapping = {
-            1: "LIBRARY",
-            2: "LIBRARY",
-            3: "HOSTEL",
-        }
-    else:
-        mapping = {
-            0: "HOSTEL",
-            1: "LIBRARY",
-            2: "LIBRARY",
-            3: "HOSTEL",
-        }
-    return mapping.get(user_pass.current_step)
-
-
-def step_label(step):
-    return STEP_LABELS.get(step, "Valid Scan")
-
-
-def _resolve_active_policy(current_date=None):
-    """
-    Resolve the active policy for a given date.
-    If date-range fields are present, use them.
-    Otherwise, fallback to latest Settings row.
-    """
-    current_date = current_date or timezone.localdate()
-    queryset = Settings.objects.all().order_by("-pk")
-
-    model_fields = {field.name for field in Settings._meta.get_fields()}
-    if {"start_date", "end_date"}.issubset(model_fields):
-        dated = queryset.filter(start_date__lte=current_date, end_date__gte=current_date).first()
-        if dated:
-            return dated
-
-    return queryset.first()
-
-
-def _resolve_transit_timers(student, now=None):
-    now = now or timezone.now()
-    policy = _resolve_active_policy(current_date=timezone.localdate(now))
-
-    frontend_timer = None
-    hostel_out_library_timer = None
-    backend_timer = None
-
-    if policy:
-        frontend_timer = policy.frontend_checkin_timer
-        hostel_out_library_timer = policy.library_timer_for_hostel_out
-        backend_timer = policy.backend_checkin_timer
-
-        if policy.enable_hostel_timers and student.hostel:
-            hostel_frontend = student.hostel.frontend_checkin_timer
-            hostel_backend = student.hostel.backend_checkin_timer
-            if hostel_frontend is not None:
-                frontend_timer = hostel_frontend
-            if hostel_backend is not None:
-                backend_timer = hostel_backend
-
-    frontend_timer = int(frontend_timer) if frontend_timer is not None else DEFAULT_TRANSIT_LIMIT_MINUTES
-    hostel_out_library_timer = (
-        int(hostel_out_library_timer or DEFAULT_HOSTEL_OUT_LIBRARY_TIMER_MINUTES)
-    )
-    backend_timer = int(backend_timer) if backend_timer is not None else DEFAULT_TRANSIT_LIMIT_MINUTES
-    return frontend_timer, hostel_out_library_timer, backend_timer
-
-
-def _mark_violation(user_pass, student, code, remark, occurred_at=None):
-    was_defaulter = bool(user_pass.defaulter)
     added = append_violation(user_pass, code, remark, occurred_at=occurred_at)
-    if added and not was_defaulter:
+    if added:
         student.violation_flags += 1
     return added
 
 
-def _outside_library_in_start(user_pass):
-    return timezone.make_aware(
-        datetime.combine(user_pass.date, OUTSIDE_LIBRARY_IN_START),
-        timezone.get_current_timezone(),
-    )
-
-
 def transition_checkout_from_hostel(user_pass):
-    if user_pass.current_step != 0:
+    if user_pass.current_step != STEP_HOSTEL_OUT:
         return {"status": False, "reason_code": "INVALID_TRANSITION", "message": "Invalid step for Hostel Exit."}
 
     now = timezone.now()
@@ -109,7 +40,7 @@ def transition_checkout_from_hostel(user_pass):
 
     student.is_checked_in = False
     user_pass.hostel_checkout_time = now
-    user_pass.current_step = 1
+    user_pass.current_step = STEP_LIBRARY_IN
 
     student.save(update_fields=["is_checked_in"])
     user_pass.save(update_fields=["hostel_checkout_time", "current_step"])
@@ -118,17 +49,17 @@ def transition_checkout_from_hostel(user_pass):
 
 
 def transition_checkin_to_library(user_pass):
-    if user_pass.current_step != 1:
+    if user_pass.current_step != STEP_LIBRARY_IN:
         return {"status": False, "reason_code": "INVALID_TRANSITION", "message": "Exit hostel first."}
 
     now = timezone.now()
     student = user_pass.user.student
-    frontend_timer, hostel_out_library_timer, _ = _resolve_transit_timers(student, now=now)
+    frontend_timer, hostel_out_library_timer, _ = resolve_transit_timers(student, now=now)
 
     transit_start = user_pass.hostel_checkout_time
     allowed_minutes = frontend_timer
     if user_pass.pass_type == "OUTSIDE":
-        transit_start = _outside_library_in_start(user_pass)
+        transit_start = outside_library_in_start(user_pass)
         allowed_minutes = hostel_out_library_timer
 
     violation_occurred = False
@@ -138,15 +69,15 @@ def transition_checkin_to_library(user_pass):
             violation_occurred = _mark_violation(
                 user_pass,
                 student,
-                "LATE_LIBRARY_IN",
-                f"Violation: Library IN Late ({transit.seconds // 60} mins)",
+                STEP_LIBRARY_IN,
+                f"Violation: Library IN Late ({int(transit.total_seconds() // 60)} mins)",
                 occurred_at=now,
             )
             if violation_occurred:
                 student.save(update_fields=["violation_flags"])
 
     user_pass.library_in_time = now
-    user_pass.current_step = 2
+    user_pass.current_step = STEP_LIBRARY_OUT
     user_pass.save(
         update_fields=[
             "library_in_time",
@@ -161,30 +92,58 @@ def transition_checkin_to_library(user_pass):
     payload = {"status": True, "reason_code": "TRANSITION_APPLIED", "message": "Checked into Library."}
     if violation_occurred:
         payload["violation_occurred"] = True
-        payload["violation_message"] = "Violation Occurred for Late Scan"
+        payload["violation_message"] = "Violation occurred for late Library IN scan."
     return payload
 
 
 def transition_checkout_from_library(user_pass):
-    if user_pass.current_step != 2:
+    if user_pass.current_step != STEP_LIBRARY_OUT:
         return {"status": False, "reason_code": "INVALID_TRANSITION", "message": "Student not inside resource."}
 
     now = timezone.now()
+    student = user_pass.user.student
+    policy = resolve_active_policy(timezone.localdate(now))
+    cutoff_at = library_out_cutoff_datetime(user_pass, policy=policy)
+
+    violation_occurred = False
+    if now > cutoff_at:
+        violation_occurred = _mark_violation(
+            user_pass,
+            student,
+            STEP_LIBRARY_OUT,
+            f"Violation: Library OUT Late (cutoff {get_library_out_cutoff_time(policy).strftime('%H:%M')})",
+            occurred_at=now,
+        )
+        if violation_occurred:
+            student.save(update_fields=["violation_flags"])
 
     user_pass.library_out_time = now
-    user_pass.current_step = 3
-    user_pass.save(update_fields=["library_out_time", "current_step"])
+    user_pass.current_step = STEP_HOSTEL_IN
+    user_pass.save(
+        update_fields=[
+            "library_out_time",
+            "current_step",
+            "defaulter",
+            "defaulter_remarks",
+            "violation_code",
+            "violation_time",
+        ]
+    )
 
-    return {"status": True, "reason_code": "TRANSITION_APPLIED", "message": "Library Exit recorded."}
+    payload = {"status": True, "reason_code": "TRANSITION_APPLIED", "message": "Library Exit recorded."}
+    if violation_occurred:
+        payload["violation_occurred"] = True
+        payload["violation_message"] = "Violation occurred for late Library OUT scan."
+    return payload
 
 
 def transition_checkin_to_hostel(student):
-    user_pass = student.user.nightpass_set.filter(valid=True).first()
-    if not user_pass or user_pass.current_step != 3:
+    user_pass = student.user.nightpass_set.filter(valid=True).order_by("-date", "-start_time").first()
+    if not user_pass or user_pass.current_step != STEP_HOSTEL_IN:
         return {"status": False, "reason_code": "INVALID_TRANSITION", "message": "Must exit library first."}
 
     now = timezone.now()
-    _, _, backend_timer = _resolve_transit_timers(student, now=now)
+    _, _, backend_timer = resolve_transit_timers(student, now=now)
 
     violation_occurred = False
     if user_pass.library_out_time:
@@ -193,8 +152,8 @@ def transition_checkin_to_hostel(student):
             violation_occurred = _mark_violation(
                 user_pass,
                 student,
-                "LATE_HOSTEL_IN",
-                f"Late return ({transit.seconds // 60} mins)",
+                STEP_HOSTEL_IN,
+                f"Late return ({int(transit.total_seconds() // 60)} mins)",
                 occurred_at=now,
             )
 
@@ -204,7 +163,7 @@ def transition_checkin_to_hostel(student):
     student.save(update_fields=["is_checked_in", "hostel_checkin_time", "has_booked", "violation_flags"])
 
     user_pass.hostel_checkin_time = now
-    user_pass.current_step = 4
+    user_pass.current_step = STEP_COMPLETED
     user_pass.valid = False
     user_pass.save(
         update_fields=[
@@ -221,5 +180,5 @@ def transition_checkin_to_hostel(student):
     payload = {"status": True, "reason_code": "TRANSITION_APPLIED", "message": "Hostel Entry Success. Pass Closed."}
     if violation_occurred:
         payload["violation_occurred"] = True
-        payload["violation_message"] = "Violation Occurred for Late Scan"
+        payload["violation_message"] = "Violation occurred for late Hostel IN scan."
     return payload

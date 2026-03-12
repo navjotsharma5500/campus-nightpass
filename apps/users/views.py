@@ -18,11 +18,15 @@ from django.urls import reverse
 import json
 from .services.violation_utils import violation_codes
 
+DASHBOARD_VIEW_ONLY_GROUP = 'dashboard_view_only'
+
 
 def get_post_login_redirect(user):
     if getattr(user, 'user_type', None) == 'admin':
         return '/access/admin-dashboard'
     if getattr(user, 'user_type', None) == 'security':
+        if user.groups.filter(name=DASHBOARD_VIEW_ONLY_GROUP).exists():
+            return '/access/admin-dashboard'
         return '/access'
     return '/'
 
