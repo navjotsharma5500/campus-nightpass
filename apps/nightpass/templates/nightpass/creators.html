@@ -15,8 +15,8 @@ html::-webkit-scrollbar,body::-webkit-scrollbar{display:none}
 .cards-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:26px}
 .dev-card{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:16px;box-shadow:0 8px 20px rgba(0,0,0,.06);cursor:pointer;transition:.25s}
 .dev-card:hover{transform:translateY(-6px);border-color:#60a5fa;box-shadow:0 14px 30px rgba(37,99,235,.22)}
-.dev-head{display:flex;align-items:center;gap:12px;margin-bottom:12px}
-.dev-avatar{width:64px;height:64px;border-radius:12px;object-fit:cover;border:2px solid #eef2ff}
+.dev-head{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;margin-bottom:12px}
+.dev-avatar{width:120px;height:120px;border-radius:14px;object-fit:cover;border:3px solid #eef2ff}
 .dev-name{font-size:18px;font-weight:700;color:#0f172a}
 .dev-role{font-size:13px;font-weight:600;color:#1d4ed8}
 .dev-text{font-size:13px;color:#475569;line-height:1.6}
@@ -52,35 +52,35 @@ html::-webkit-scrollbar,body::-webkit-scrollbar{display:none}
     </div>
 
     <div class="cards-grid">
-        <div class="dev-card" data-dev="navjot">
-            <div class="dev-head">
-                <img class="dev-avatar" src="https://ik.imagekit.io/7khjnlfow/email-assets/IMG_4888.JPG?updatedAt=1770071997943" alt="Navjot Sharma">
-                <div>
-                    <div class="dev-name">Navjot Sharma</div>
-                    <div class="dev-role">System Architect &amp; Lead Developer</div>
-                </div>
-            </div>
-            <p class="dev-text">Led the redesign and architecture of the Night Pass System Version 2.0, implementing the new scanning workflow, dashboard interface, and operational rules for hostel–library transit monitoring.</p>
-        </div>
         <div class="dev-card" data-dev="aman">
             <div class="dev-head">
                 <img class="dev-avatar" src="https://ik.imagekit.io/7khjnlfow/email-assets/1725703687306.jpg" alt="Aman Kapoor">
                 <div>
                     <div class="dev-name">Aman Kapoor</div>
-                    <div class="dev-role">Core Backend Developer</div>
+                    <div class="dev-role">Lead Developer</div>
                 </div>
             </div>
-            <p class="dev-text">Developed the initial backend framework and core functional modules of the Campus NightPass system using Django, forming the technical foundation for the platform.</p>
+            <p class="dev-text">Work involved building the framework of the platform and implementing the foundational system logic that enabled the core application functionality.</p>
         </div>
         <div class="dev-card" data-dev="sagarika">
             <div class="dev-head">
                 <img class="dev-avatar" src="https://ik.imagekit.io/7khjnlfow/email-assets/1753485244517.jpg" alt="Sagarika Wankhede">
                 <div>
                     <div class="dev-name">Sagarika Wankhede</div>
-                    <div class="dev-role">Frontend Contributor</div>
+                    <div class="dev-role">Frontend Development</div>
                 </div>
             </div>
-            <p class="dev-text">Contributed to the initial frontend interface and UI components during the early development phase of the NightPass system.</p>
+            <p class="dev-text">Contributed to the development of the frontend of the Campus NightPass system, focusing on building the visual interface and user-facing components of the platform.</p>
+        </div>
+        <div class="dev-card" data-dev="navjot">
+            <div class="dev-head">
+                <img class="dev-avatar" src="https://ik.imagekit.io/7khjnlfow/email-assets/IMG_4888.JPG?updatedAt=1770071997943" alt="Navjot Sharma">
+                <div>
+                    <div class="dev-name">Navjot Sharma</div>
+                    <div class="dev-role">Project Supervisor &amp; System Development</div>
+                </div>
+            </div>
+            <p class="dev-text">Supervised the development of the Campus NightPass system while actively contributing to system improvement, testing, and deployment.</p>
         </div>
     </div>
 
@@ -89,20 +89,54 @@ html::-webkit-scrollbar,body::-webkit-scrollbar{display:none}
         <h3 class="section-title">Library Night Pass Management System – Creators</h3>
         <p class="section-text">The Library Night Pass Management System (Version 2.0) is an institutional software solution developed for the Nava Nalanda Library under the Dean of Student Affairs Office at Thapar Institute of Engineering and Technology.</p>
         <p class="section-text">This platform was designed to manage late-night academic access for students while ensuring security, accountability, and real-time monitoring of hostel-to-library movement. The system integrates booking, scanning verification, transit monitoring, and violation tracking through a modern dashboard-based interface.</p>
-        <p class="section-text">Version 2.0 represents a major redesign of the earlier system, introducing improved architecture, enhanced security workflows, and a fully redesigned administrative interface.</p>
+        <p class="section-text">Version 2.0 represents a major redesign of the system, introducing improved architecture, enhanced security workflows, and a fully redesigned administrative interface.</p>
+    </div>
+
+    <div class="section-card">
+        <h3 class="section-title">Library Night Pass System</h3>
+        <p class="section-text">The Library Night Pass Management System is a digital platform developed to manage late-night academic access for students. The system allows students to request permission to leave their hostels after evening hours in order to use institutional academic facilities such as the Nava Nalanda Library.</p>
+        <p class="section-text">The platform integrates booking, security verification, and real-time monitoring of student movement between hostels and the library. Through a structured scanning workflow and administrative dashboard, the system ensures accountability while maintaining a smooth process for students who need late-night study access.</p>
+    </div>
+
+    <div class="section-card">
+        <h3 class="section-title">System Working Workflow</h3>
+        <ul class="section-list">
+            <li>Students book a Library Night Pass through the online portal.</li>
+            <li>Each booking is assigned to a specific location and time slot.</li>
+            <li>Students must follow the scanning process while leaving and returning to the hostel.</li>
+            <li>Security personnel verify student movement using ID card scanning.</li>
+            <li>The system records all movements in real time through the administrative dashboard.</li>
+            <li>If a student does not follow the required scan sequence or exceeds the allowed time, the system records a violation.</li>
+        </ul>
+    </div>
+
+    <div class="section-card">
+        <h3 class="section-title">Scanning Logic</h3>
+        <ul class="section-list">
+            <li>Hostel OUT Scan - student leaves the hostel</li>
+            <li>Library IN Scan - student enters the library</li>
+            <li>Library OUT Scan - student leaves the library</li>
+            <li>Hostel IN Scan - student returns to the hostel</li>
+        </ul>
+        <p class="section-text">The system records timestamps for each scan and evaluates movement according to defined timing rules. If any stage is missed or delayed beyond the allowed limit, the system automatically generates a violation entry.</p>
+    </div>
+
+    <div class="section-card">
+        <h3 class="section-title">System Rules &amp; Policies</h3>
+        <ul class="section-list">
+            <li>Each student can hold only one active booking at a time.</li>
+            <li>Students must follow the complete scan sequence.</li>
+            <li>Late entries automatically generate violation records.</li>
+            <li>Violations are permanent records and cannot be automatically deleted.</li>
+            <li>Security staff verify entries using institutional ID scanning.</li>
+            <li>The system prevents repeated scans within a restricted time interval to ensure proper monitoring.</li>
+        </ul>
     </div>
 
     <div class="section-card">
         <h3 class="section-title">Software Ownership</h3>
         <p class="section-text">This application is an official institutional software system developed for the Dean of Student Affairs Office at Thapar Institute of Engineering and Technology.</p>
         <p class="section-text">All institutional rights and operational ownership remain with the DoSA Office.</p>
-    </div>
-
-    <div class="section-card">
-        <h3 class="section-title">Legacy System</h3>
-        <p class="section-text">The previous version of the Night Pass system was originally developed by Pancham Agarwal (Alumnus – COE).</p>
-        <p class="linkline">LinkedIn: <a href="https://www.linkedin.com/in/pancham1603/" target="_blank">https://www.linkedin.com/in/pancham1603/</a></p>
-        <p class="section-text">The current Version 2.0 represents a complete redesign and redevelopment, including new system architecture, updated database models, redesigned dashboards, and an improved scanning workflow.</p>
     </div>
 
     <div class="section-card">
@@ -134,47 +168,48 @@ html::-webkit-scrollbar,body::-webkit-scrollbar{display:none}
 
 <script>
 const developerData = {
-  navjot: {
-    name: "Navjot Sharma",
-    role: "System Architect & Lead Developer",
-    avatar: "https://ik.imagekit.io/7khjnlfow/email-assets/IMG_4888.JPG?updatedAt=1770071997943",
-    description: "Navjot Sharma led the architectural redesign and system restructuring of the Library Night Pass Management System Version 2.0. Working under the DoSA Office, he implemented the updated database structure, redesigned dashboards, and created the improved scanning and violation monitoring workflows used in the current system.",
-    points: [
-      "System architecture redesign",
-      "Database restructuring and model updates",
-      "Development of the admin dashboard",
-      "Implementation of timer-based transit monitoring",
-      "Debugging and stabilization of backend modules",
-      "Redesign of the frontend interface and workflows",
-      "Deployment and system integration for institutional use"
-    ],
-    linkedin: "https://www.linkedin.com/in/navjot-sharma-0bb7143b1"
-  },
   aman: {
     name: "Aman Kapoor",
-    role: "Core Backend Developer",
+    role: "Lead Developer",
     avatar: "https://ik.imagekit.io/7khjnlfow/email-assets/1725703687306.jpg",
-    description: "Aman Kapoor played a significant role in the foundational backend development of the NightPass system. His work helped establish the initial Django-based framework and core functional modules that enabled student booking, verification, and tracking mechanisms.",
+    description: "Work involved building the framework of the platform and implementing the foundational system logic that enabled the core application functionality. Development spanned both early and later stages of the project, establishing the system architecture and full-stack workflow that supported further development and deployment.",
     points: [
-      "Backend development using Django",
-      "Implementation of student booking logic",
-      "Development of verification and tracking modules",
-      "Backend API support for system operations",
-      "Contribution to the early functional base of the system"
+      "Designed and implemented the core system framework",
+      "Developed foundational backend logic",
+      "Contributed across early and later phases of development",
+      "Helped establish the system architecture",
+      "Supported the full-stack workflow used for further development and deployment"
     ],
     linkedin: "https://www.linkedin.com/in/aman-kapoor201/"
   },
   sagarika: {
     name: "Sagarika Wankhede",
-    role: "Frontend Contributor",
+    role: "Frontend Development",
     avatar: "https://ik.imagekit.io/7khjnlfow/email-assets/1753485244517.jpg",
-    description: "Sagarika Wankhede contributed to the early user interface development and frontend components during the initial phase of the project.",
+    description: "Sagarika Wankhede contributed to the development of the frontend of the Campus NightPass system, focusing on building the visual interface and user-facing components of the platform.",
     points: [
-      "Initial frontend interface components",
-      "UI structure development",
-      "Early-stage frontend support"
+      "Developed the website frontend interface",
+      "Implemented the visual layout of the platform",
+      "Built user-facing UI components",
+      "Maintained design consistency across the system",
+      "Improved usability and presentation of the platform"
     ],
     linkedin: "https://www.linkedin.com/in/sagarikawankhede/"
+  },
+  navjot: {
+    name: "Navjot Sharma",
+    role: "Project Supervisor & System Development",
+    avatar: "https://ik.imagekit.io/7khjnlfow/email-assets/IMG_4888.JPG?updatedAt=1770071997943",
+    description: "Navjot Sharma supervised the development of the Campus NightPass system while actively contributing to system improvement, testing, and deployment. His work focused on refining workflows, expanding system features, and building the administrative backend used for institutional management.",
+    points: [
+      "Project supervision and development guidance",
+      "Admin dashboard backend development",
+      "System workflow improvements",
+      "Testing and debugging support",
+      "Feature expansion and system refinement",
+      "Deployment and operational oversight"
+    ],
+    linkedin: "https://www.linkedin.com/in/navjot-sharma-0bb7143b1"
   }
 };
 
