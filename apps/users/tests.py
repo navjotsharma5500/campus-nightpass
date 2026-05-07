@@ -8,7 +8,7 @@ from django.utils import timezone
 from apps.global_settings.models import Settings
 from apps.nightpass.models import CampusResource, Hostel
 from apps.nightpass.services.booking_service import create_pass_for_student
-from apps.users.models import CustomUser, NightPass, Security, Student
+from apps.users.models import CustomUser, NightPass, Security, Student, ViolationAuditLog
 from apps.users.services.deadline_evaluator import evaluate_active_pass_deadlines
 from apps.users.services.pass_policy import get_active_pass_for_user
 from apps.validation.services.lifecycle import (
@@ -118,7 +118,7 @@ class UnifiedNightPassPolicyTests(TestCase):
         user_pass.refresh_from_db()
         return user_pass
 
-    def test_previous_day_pass_expires_and_new_booking_is_allowed(self):
+    def test_previous_day_pass_expires_and_blocks_until_admin_allows(self):
         yesterday = timezone.localdate(self.now) - timedelta(days=1)
         old_pass = self._create_pass(pass_date=yesterday, current_step=3)
         NightPass.objects.filter(pass_id=old_pass.pass_id).update(
@@ -133,13 +133,54 @@ class UnifiedNightPassPolicyTests(TestCase):
 
         old_pass.refresh_from_db()
         self.student.refresh_from_db()
-        self.assertTrue(result["status"])
+        self.assertFalse(result["status"])
+        self.assertEqual(result["reason_code"], "BLOCKED_MAX_VIOLATIONS")
         self.assertFalse(old_pass.valid)
         self.assertIn("LATE_HOSTEL_IN", old_pass.violation_code or "")
         self.assertEqual(self.student.violation_flags, 1)
-        self.assertTrue(self.student.has_booked)
+        self.assertFalse(self.student.has_booked)
         self.assertTrue(self.student.is_checked_in)
-        self.assertEqual(NightPass.objects.filter(user=self.student_user, valid=True).count(), 1)
+        self.assertEqual(NightPass.objects.filter(user=self.student_user, valid=True).count(), 0)
+
+    def test_admin_allow_preserves_violation_history_and_reopens_booking(self):
+        self.student.violation_flags = 1
+        self.student.save(update_fields=["violation_flags"])
+        incident = self._create_pass(current_step=3, valid=False)
+        NightPass.objects.filter(pass_id=incident.pass_id).update(
+            defaulter=True,
+            violation_code="LATE_HOSTEL_IN",
+            defaulter_remarks="Late Hostel IN",
+            violation_time=self.now,
+        )
+
+        admin_user = CustomUser.objects.create_user(
+            email="admin-user@example.com",
+            password="pass12345",
+            user_type="admin",
+        )
+        self.client.force_login(admin_user)
+        response = self.client.post(
+            reverse("superuser_allow_student_record", args=[self.student.registration_number]),
+            {"next": reverse("superuser_violations")},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.student.refresh_from_db()
+        incident.refresh_from_db()
+        self.assertEqual(self.student.violation_flags, 0)
+        self.assertFalse(incident.defaulter)
+        self.assertEqual(incident.violation_code, "LATE_HOSTEL_IN")
+        self.assertEqual(incident.defaulter_remarks, "Late Hostel IN")
+        self.assertTrue(
+            ViolationAuditLog.objects.filter(
+                student=self.student,
+                event_type=ViolationAuditLog.ALLOWED_AGAIN,
+                performed_by=admin_user,
+            ).exists()
+        )
+
+        result = create_pass_for_student(self.student_user, self.hostel_resource)
+        self.assertTrue(result["status"])
 
     def test_multiple_booking_is_blocked_until_existing_booking_is_cancelled(self):
         first = create_pass_for_student(self.student_user, self.hostel_resource)

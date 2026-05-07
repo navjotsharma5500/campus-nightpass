@@ -10,7 +10,10 @@
   .np-admin-hero,.np-app-panel { border-radius:16px; background:#fff; padding:24px; box-shadow:0 10px 24px rgba(13,43,83,.06); }
   .np-admin-hero { color:#fff; background:linear-gradient(135deg, #005f99, #0f6ecf 48%, #18a999); }
   .actions-row { margin-top:16px; }
-  .clear-btn { padding:10px 12px; border:none; border-radius:8px; background:#dc2626; color:#fff; cursor:pointer; }
+  .allow-btn { padding:10px 12px; border:none; border-radius:8px; background:#16803c; color:#fff; cursor:pointer; }
+  .status-pill { display:inline-flex; padding:4px 8px; border-radius:999px; font-size:12px; font-weight:700; }
+  .status-pill.active { color:#991b1b; background:#fee2e2; }
+  .status-pill.cleared { color:#166534; background:#dcfce7; }
 </style>
 {% endblock %}
 
@@ -35,11 +38,27 @@
                 <h2>History</h2>
             </div>
             <div class="actions-row">
-                <form method="post" action="{% url 'superuser_clear_student_record' student.registration_number %}" onsubmit="return confirm('Clear violation/defaulter record for this student?');">
+                <p>
+                    Defaulter:
+                    {% if active_restriction %}
+                    <span class="status-pill active">Yes</span>
+                    {% else %}
+                    <span class="status-pill cleared">No</span>
+                    {% endif %}
+                    &nbsp; Violation Block:
+                    {% if active_restriction %}
+                    <span class="status-pill active">Active</span>
+                    {% else %}
+                    <span class="status-pill cleared">Cleared</span>
+                    {% endif %}
+                </p>
+                {% if active_restriction %}
+                <form method="post" action="{% url 'superuser_allow_student_record' student.registration_number %}" onsubmit="return confirm('Allow this student for new bookings?');">
                     {% csrf_token %}
                     <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                    <button class="clear-btn" type="submit">Clear Record</button>
+                    <button class="allow-btn" type="submit">Allow</button>
                 </form>
+                {% endif %}
             </div>
             <table class="dashboard">
                 <thead>
@@ -71,6 +90,35 @@
                     {% empty %}
                     <tr>
                         <td colspan="9">No history found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="np-app-panel">
+            <div class="np-panel-head">
+                <h2>Audit Log</h2>
+            </div>
+            <table class="dashboard">
+                <thead>
+                    <tr>
+                        <th>Action</th>
+                        <th>Date & Time</th>
+                        <th>Admin</th>
+                        <th>Log</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in audit_logs %}
+                    <tr>
+                        <td>{{ log.get_event_type_display }}</td>
+                        <td>{{ log.created_at|date:"d M Y H:i:s" }}</td>
+                        <td>{% if log.performed_by %}{{ log.performed_by.email }}{% else %}System{% endif %}</td>
+                        <td>{{ log.message }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4">No audit logs found.</td>
                     </tr>
                     {% endfor %}
                 </tbody>

@@ -1,5 +1,6 @@
 from datetime import datetime, time, timedelta
 from django.db import models
+from django.conf import settings as django_settings
 from django.contrib.auth.models import AbstractUser
 from django.contrib.auth.base_user import BaseUserManager
 from django.utils.translation import gettext_lazy as _
@@ -234,6 +235,34 @@ class NightPass(models.Model):
         if self.current_step == STEP_HOSTEL_IN and self.library_out_time:
             return now > (self.library_out_time + timedelta(minutes=backend_timer))
         return False
+
+
+class ViolationAuditLog(models.Model):
+    BECAME_DEFAULTER = "BECAME_DEFAULTER"
+    ALLOWED_AGAIN = "ALLOWED_AGAIN"
+    EVENT_CHOICES = (
+        (BECAME_DEFAULTER, "Student became defaulter"),
+        (ALLOWED_AGAIN, "Student was allowed again"),
+    )
+
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="violation_audit_logs")
+    night_pass = models.ForeignKey(NightPass, on_delete=models.SET_NULL, blank=True, null=True, related_name="audit_logs")
+    event_type = models.CharField(max_length=32, choices=EVENT_CHOICES)
+    message = models.TextField()
+    performed_by = models.ForeignKey(
+        django_settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="violation_actions",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+
+    def __str__(self):
+        return f"{self.student_id} - {self.get_event_type_display()}"
 
 @receiver(post_delete, sender=Student)
 def delete_image_from_imagekit(sender, instance, **kwargs):

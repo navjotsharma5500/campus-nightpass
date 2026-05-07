@@ -7,9 +7,8 @@ from django.http import HttpResponse, HttpResponseRedirect
 from django.contrib.auth.decorators import user_passes_test
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
-from .models import Student, CustomUser
+from .models import Student, CustomUser, ViolationAuditLog
 from .models import NightPass
-from ..global_settings.models import Settings
 from .google_config import config
 from django.http import JsonResponse
 import requests
@@ -44,6 +43,33 @@ def _student_search_queryset(queryset, search_term):
         | Q(email__icontains=search_term)
         | Q(hostel__name__icontains=search_term)
     )
+
+
+def _students_with_violation_history(queryset):
+    return queryset.filter(
+        Q(violation_flags__gt=0)
+        | Q(user__nightpass__defaulter=True)
+        | Q(user__nightpass__violation_code__gt="")
+    ).distinct()
+
+
+def _allow_students(students, admin_user):
+    allowed = 0
+    for student in students:
+        had_active_restriction = student.violation_flags > 0
+        NightPass.objects.filter(user=student.user, defaulter=True).update(defaulter=False)
+        if student.violation_flags != 0:
+            student.violation_flags = 0
+            student.save(update_fields=["violation_flags"])
+        ViolationAuditLog.objects.create(
+            student=student,
+            event_type=ViolationAuditLog.ALLOWED_AGAIN,
+            message="Student was allowed again. Defaulter set to No and violation block cleared.",
+            performed_by=admin_user,
+        )
+        if had_active_restriction:
+            allowed += 1
+    return allowed
 
 
 def gauth(request):
@@ -213,9 +239,21 @@ def update_user_image(request):
 
 @user_passes_test(is_super_admin)
 def superuser_violations(request):
+    if request.method == "POST":
+        selected_students = request.POST.getlist("selected_students")
+        students = Student.objects.select_related("user").filter(registration_number__in=selected_students)
+        allowed = _allow_students(students, request.user)
+        if selected_students:
+            messages.success(request, f"Allowed {allowed} selected student(s) for new bookings.")
+        else:
+            messages.warning(request, "Select at least one student to allow.")
+        return redirect(request.get_full_path())
+
     search_term = (request.GET.get("q") or "").strip()
-    students = Student.objects.select_related("hostel").filter(violation_flags__gt=0)
+    students = _students_with_violation_history(Student.objects.select_related("hostel"))
     students = _student_search_queryset(students, search_term).order_by("-violation_flags", "name")
+    for student in students:
+        student.active_restriction = student.violation_flags > 0
     return render(
         request,
         "admin/superuser_student_list.html",
@@ -231,9 +269,12 @@ def superuser_violations(request):
 @user_passes_test(is_super_admin)
 def superuser_violation_detail(request, registration_number):
     student = get_object_or_404(Student.objects.select_related("hostel"), registration_number=registration_number)
-    records = student.user.nightpass_set.filter(defaulter=True).order_by("-violation_time", "-date", "-start_time")
+    records = student.user.nightpass_set.filter(
+        Q(defaulter=True) | Q(violation_code__gt="")
+    ).order_by("-violation_time", "-date", "-start_time")
     for record in records:
         record.violation_codes_display = ", ".join(violation_codes(record)) or "-"
+    audit_logs = student.violation_audit_logs.select_related("performed_by").all()
     return render(
         request,
         "admin/superuser_student_detail.html",
@@ -242,17 +283,33 @@ def superuser_violation_detail(request, registration_number):
             "mode": "violations",
             "student": student,
             "records": records,
+            "audit_logs": audit_logs,
+            "active_restriction": student.violation_flags > 0,
         },
     )
 
 
 @user_passes_test(is_super_admin)
 def superuser_defaulters(request):
+    if request.method == "POST":
+        selected_students = request.POST.getlist("selected_students")
+        students = Student.objects.select_related("user").filter(registration_number__in=selected_students)
+        allowed = _allow_students(students, request.user)
+        if selected_students:
+            messages.success(request, f"Allowed {allowed} selected student(s) for new bookings.")
+        else:
+            messages.warning(request, "Select at least one student to allow.")
+        return redirect(request.get_full_path())
+
     search_term = (request.GET.get("q") or "").strip()
-    policy = Settings.current()
-    max_violations = int(policy.max_violation_count) if policy and policy.max_violation_count is not None else 3
-    students = Student.objects.select_related("hostel").filter(violation_flags__gte=max_violations)
+    students = Student.objects.select_related("hostel").filter(
+        Q(violation_flags__gt=0)
+        | Q(user__nightpass__defaulter=True)
+        | Q(user__nightpass__violation_code__gt="")
+    ).distinct()
     students = _student_search_queryset(students, search_term).order_by("-violation_flags", "name")
+    for student in students:
+        student.active_restriction = student.violation_flags > 0
     return render(
         request,
         "admin/superuser_student_list.html",
@@ -268,9 +325,12 @@ def superuser_defaulters(request):
 @user_passes_test(is_super_admin)
 def superuser_defaulter_detail(request, registration_number):
     student = get_object_or_404(Student.objects.select_related("hostel"), registration_number=registration_number)
-    records = student.user.nightpass_set.filter(defaulter=True).order_by("-violation_time", "-date", "-start_time")
+    records = student.user.nightpass_set.filter(
+        Q(defaulter=True) | Q(violation_code__gt="")
+    ).order_by("-violation_time", "-date", "-start_time")
     for record in records:
         record.violation_codes_display = ", ".join(violation_codes(record)) or "-"
+    audit_logs = student.violation_audit_logs.select_related("performed_by").all()
     return render(
         request,
         "admin/superuser_student_detail.html",
@@ -279,25 +339,20 @@ def superuser_defaulter_detail(request, registration_number):
             "mode": "blocked",
             "student": student,
             "records": records,
+            "audit_logs": audit_logs,
+            "active_restriction": student.violation_flags > 0,
         },
     )
 
 
 @user_passes_test(is_super_admin)
-def superuser_clear_student_record(request, registration_number):
+def superuser_allow_student_record(request, registration_number):
     if request.method != "POST":
         return redirect("/admin/")
 
     student = get_object_or_404(Student, registration_number=registration_number)
-    NightPass.objects.filter(user=student.user).update(
-        defaulter=False,
-        defaulter_remarks="",
-        violation_code=None,
-        violation_time=None,
-    )
-    student.violation_flags = 0
-    student.save(update_fields=["violation_flags"])
-    messages.success(request, f"Cleared violation/defaulter record for {student.name}.")
+    _allow_students([student], request.user)
+    messages.success(request, f"Allowed {student.name} for new bookings.")
 
     next_url = request.POST.get("next") or reverse("superuser_violations")
     return redirect(next_url)

@@ -17,6 +17,14 @@ def append_violation(user_pass, code, message, occurred_at=None):
     user_pass.defaulter_remarks = f"{existing} | {combined}" if existing else combined
     user_pass.defaulter = True
     user_pass.violation_time = occurred_at
+    from ..models import ViolationAuditLog
+
+    ViolationAuditLog.objects.create(
+        student=user_pass.user.student,
+        night_pass=user_pass,
+        event_type=ViolationAuditLog.BECAME_DEFAULTER,
+        message=f"Student became defaulter: {combined}",
+    )
     return True
 
 

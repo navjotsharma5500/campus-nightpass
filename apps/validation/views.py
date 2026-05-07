@@ -83,7 +83,7 @@ def _activity_queryset_for_date(selected_date):
 
 def _blocked_students_queryset(max_violations):
     return Student.objects.select_related("hostel").filter(
-        violation_flags__gte=max_violations
+        violation_flags__gt=0
     ).order_by("-violation_flags", "name")
 
 
@@ -96,7 +96,7 @@ def _apply_activity_filter(queryset, activity_tab, max_violations):
         return queryset.filter(current_step=4)
     if activity_tab == "defaulters":
         return queryset.filter(
-            Q(defaulter=True) | Q(user__student__violation_flags__gte=max_violations)
+            Q(defaulter=True) | Q(user__student__violation_flags__gt=0)
         )
     return queryset
 
@@ -263,7 +263,7 @@ def admin_dashboard(request):
     selected_student = _resolve_selected_student(search_term, (request.GET.get("student") or "").strip())
     student_timeline = _student_timeline(selected_student, max_violations) if selected_student else []
     blocked_on_selected = (
-        selected_student.violation_flags >= max_violations
+        selected_student.violation_flags > 0
         if selected_student
         else False
     )
@@ -626,7 +626,7 @@ def download_admin_table_excel(request):
         sheet.append(headers)
         if student:
             timeline = _student_timeline(student, max_violations)
-            is_blocked = student.violation_flags >= max_violations
+            is_blocked = student.violation_flags > 0
             for row in timeline:
                 transit_status = "In Transit" if row.current_step in [1, 3] and row.valid else row.dashboard_status
                 sheet.append([
@@ -662,7 +662,7 @@ def download_admin_table_excel(request):
                 student.user.email if student.user else "-",
                 student.hostel.name if student.hostel else "-",
                 student.violation_flags,
-                "Yes" if student.violation_flags >= max_violations else "No",
+                "Yes" if student.violation_flags > 0 else "No",
             ])
         filename = f"student_search_{timezone.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
     elif scope == "students_all":

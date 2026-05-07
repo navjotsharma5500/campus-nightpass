@@ -3,6 +3,7 @@ import json
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
@@ -25,7 +26,9 @@ def campus_resources_home(request):
             messages.error(request, "Student profile is missing for this account. Please contact the administrator.")
             return redirect('/logout')
         user_pass = get_active_pass_for_user(user)
-        user_incidents = NightPass.objects.filter(user=user, defaulter=True)
+        user_incidents = NightPass.objects.filter(user=user).filter(
+            Q(defaulter=True) | Q(violation_code__gt="")
+        )
 
         if Settings.enable_hostel_timers:
             frontend_timer = user.student.hostel.frontend_checkin_timer

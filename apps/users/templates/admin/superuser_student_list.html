@@ -12,9 +12,13 @@
   .toolbar { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
   .search-form { display:flex; gap:8px; flex-wrap:wrap; }
   .search-form input { min-width:260px; padding:10px 12px; border:1px solid #cbd5e1; border-radius:8px; }
-  .search-form button, .clear-btn { padding:10px 12px; border:none; border-radius:8px; background:#0f6ecf; color:#fff; cursor:pointer; }
-  .clear-btn { background:#dc2626; }
+  .search-form button, .allow-btn { padding:10px 12px; border:none; border-radius:8px; background:#0f6ecf; color:#fff; cursor:pointer; }
+  .allow-btn { background:#16803c; }
   .inline-form { display:inline; }
+  .bulk-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .status-pill { display:inline-flex; padding:4px 8px; border-radius:999px; font-size:12px; font-weight:700; }
+  .status-pill.active { color:#991b1b; background:#fee2e2; }
+  .status-pill.cleared { color:#166534; background:#dcfce7; }
 </style>
 {% endblock %}
 
@@ -36,25 +40,44 @@
                     <input type="text" name="q" value="{{ search_term }}" placeholder="Search by name, registration, email, hostel">
                     <button type="submit">Search</button>
                 </form>
+                <div class="bulk-actions">
+                    <button class="allow-btn" form="allow-selected-form" type="submit">Allow Selected</button>
+                </div>
             </div>
+            <form id="allow-selected-form" method="post" onsubmit="return confirm('Allow selected student(s) for new bookings?');">
+                {% csrf_token %}
             <table class="dashboard">
                 <thead>
                     <tr>
+                        <th><input type="checkbox" id="select-all-students" aria-label="Select all students"></th>
                         <th>Student</th>
                         <th>Registration</th>
                         <th>Hostel</th>
                         <th>{% if mode == "violations" %}Violation Count{% elif mode == "blocked" %}Violation Count{% else %}Defaulter Records{% endif %}</th>
+                        <th>Status</th>
                         <th>Open</th>
-                        <th>Remove</th>
+                        <th>Allow</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for student in students %}
                     <tr>
+                        <td>
+                            {% if student.active_restriction %}
+                            <input type="checkbox" name="selected_students" value="{{ student.registration_number }}" aria-label="Select {{ student.name }}">
+                            {% endif %}
+                        </td>
                         <td>{{ student.name }}</td>
                         <td>{{ student.registration_number }}</td>
                         <td>{% if student.hostel %}{{ student.hostel.name }}{% else %}-{% endif %}</td>
                         <td>{% if mode == "violations" or mode == "blocked" %}{{ student.violation_flags }}{% else %}{{ student.defaulter_count }}{% endif %}</td>
+                        <td>
+                            {% if student.active_restriction %}
+                            <span class="status-pill active">Active</span>
+                            {% else %}
+                            <span class="status-pill cleared">Cleared</span>
+                            {% endif %}
+                        </td>
                         <td>
                             {% if mode == "violations" %}
                             <a href="{% url 'superuser_violation_detail' student.registration_number %}">View History</a>
@@ -65,21 +88,33 @@
                             {% endif %}
                         </td>
                         <td>
-                            <form class="inline-form" method="post" action="{% url 'superuser_clear_student_record' student.registration_number %}" onsubmit="return confirm('Clear violation/defaulter record for this student?');">
-                                {% csrf_token %}
-                                <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                                <button class="clear-btn" type="submit">Clear Record</button>
-                            </form>
+                            {% if student.active_restriction %}
+                            <button class="allow-btn" type="submit" name="selected_students" value="{{ student.registration_number }}">Allow</button>
+                            {% else %}
+                            -
+                            {% endif %}
                         </td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="6">No records found.</td>
+                        <td colspan="8">No records found.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
+            </form>
         </div>
     </section>
 </div>
+<script>
+(() => {
+  const selectAll = document.getElementById("select-all-students");
+  if (!selectAll) return;
+  selectAll.addEventListener("change", () => {
+    document.querySelectorAll('input[name="selected_students"]').forEach((item) => {
+      item.checked = selectAll.checked;
+    });
+  });
+})();
+</script>
 {% endblock %}
