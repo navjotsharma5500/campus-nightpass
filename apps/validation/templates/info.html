@@ -76,7 +76,9 @@
 <body>
 
 <div class="header">
-    <img class="header-logo" src="https://cdn.npfs.co/uploads/template/664/6439/publish/images/ti-header-logo.png?1770294954">
+    {% load static %}
+
+<img class="header-logo" src="{% static 'images/thapar-logo.png' %}" alt="College Logo">
     <h1>CAMPUS NIGHT PASS</h1>
     <div style="position:absolute; right:120px; text-align:right; font-size:13px; color:#444;">
         <div><strong>Scanner:</strong> {{ security_location }}</div>

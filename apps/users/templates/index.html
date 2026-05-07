@@ -99,7 +99,9 @@
     </style>
 
     <div class="header">
-        <img class="header-logo" src="https://cdn.npfs.co/uploads/template/664/6439/publish/images/ti-header-logo.png?1770294954" alt="College Logo">
+        {% load static %}
+
+<img class="header-logo" src="{% static 'images/thapar-logo.png' %}" alt="College Logo">
         <h1>CAMPUS LIBRARY NIGHT PASS</h1>
         <a class="logout-button" style="visibility: hidden;" href="/logout">Logout</a>
     </div>
