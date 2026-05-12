@@ -236,7 +236,7 @@ def get_active_pass_for_user(user, now=None):
 def get_dashboard_status(user_pass, max_violations=None, now=None):
     now = now or timezone.now()
     student = user_pass.user.student
-    if max_violations is not None and student.violation_flags > 0:
+    if max_violations is not None and student.violation_flags >= max_violations:
         return "Block"
     if user_pass.defaulter:
         return "Violation"

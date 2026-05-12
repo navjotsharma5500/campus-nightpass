@@ -53,7 +53,7 @@ def validate_booking_policy(student, campus_resource):
     if policy.last_out_from_hostel and now.time() > policy.last_out_from_hostel:
         return _response("TIME_OVER_LAST_OUT_FROM_HOSTEL", "Time is over.")
 
-    if int(student.violation_flags) > 0:
+    if int(student.violation_flags) >= int(policy.max_violation_count):
         return _response(
             "BLOCKED_MAX_VIOLATIONS",
             "Nightpass facility has been temporarily suspended! Contact DOSA office for further details.",

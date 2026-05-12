@@ -9,6 +9,7 @@ from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from .models import Student, CustomUser, ViolationAuditLog
 from .models import NightPass
+from ..global_settings.models import Settings
 from .google_config import config
 from django.http import JsonResponse
 import requests
@@ -53,10 +54,21 @@ def _students_with_violation_history(queryset):
     ).distinct()
 
 
+def _max_violations():
+    policy = Settings.current()
+    return int(policy.max_violation_count) if policy and policy.max_violation_count is not None else 3
+
+
+def _is_blocked(student, max_violations=None):
+    max_violations = max_violations or _max_violations()
+    return int(student.violation_flags) >= int(max_violations)
+
+
 def _allow_students(students, admin_user):
     allowed = 0
+    max_violations = _max_violations()
     for student in students:
-        had_active_restriction = student.violation_flags > 0
+        had_active_restriction = _is_blocked(student, max_violations)
         NightPass.objects.filter(user=student.user, defaulter=True).update(defaulter=False)
         if student.violation_flags != 0:
             student.violation_flags = 0
@@ -252,8 +264,9 @@ def superuser_violations(request):
     search_term = (request.GET.get("q") or "").strip()
     students = _students_with_violation_history(Student.objects.select_related("hostel"))
     students = _student_search_queryset(students, search_term).order_by("-violation_flags", "name")
+    max_violations = _max_violations()
     for student in students:
-        student.active_restriction = student.violation_flags > 0
+        student.active_restriction = _is_blocked(student, max_violations)
     return render(
         request,
         "admin/superuser_student_list.html",
@@ -284,7 +297,7 @@ def superuser_violation_detail(request, registration_number):
             "student": student,
             "records": records,
             "audit_logs": audit_logs,
-            "active_restriction": student.violation_flags > 0,
+            "active_restriction": _is_blocked(student),
         },
     )
 
@@ -303,13 +316,14 @@ def superuser_defaulters(request):
 
     search_term = (request.GET.get("q") or "").strip()
     students = Student.objects.select_related("hostel").filter(
-        Q(violation_flags__gt=0)
-        | Q(user__nightpass__defaulter=True)
-        | Q(user__nightpass__violation_code__gt="")
+        Q(violation_flags__gte=_max_violations())
+        | Q(violation_audit_logs__event_type=ViolationAuditLog.BECAME_DEFAULTER)
+        | Q(violation_audit_logs__event_type=ViolationAuditLog.ALLOWED_AGAIN)
     ).distinct()
     students = _student_search_queryset(students, search_term).order_by("-violation_flags", "name")
+    max_violations = _max_violations()
     for student in students:
-        student.active_restriction = student.violation_flags > 0
+        student.active_restriction = _is_blocked(student, max_violations)
     return render(
         request,
         "admin/superuser_student_list.html",
@@ -340,7 +354,7 @@ def superuser_defaulter_detail(request, registration_number):
             "student": student,
             "records": records,
             "audit_logs": audit_logs,
-            "active_restriction": student.violation_flags > 0,
+            "active_restriction": _is_blocked(student),
         },
     )
 

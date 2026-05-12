@@ -118,7 +118,7 @@ class UnifiedNightPassPolicyTests(TestCase):
         user_pass.refresh_from_db()
         return user_pass
 
-    def test_previous_day_pass_expires_and_blocks_until_admin_allows(self):
+    def test_previous_day_pass_below_violation_limit_expires_and_new_booking_is_allowed(self):
         yesterday = timezone.localdate(self.now) - timedelta(days=1)
         old_pass = self._create_pass(pass_date=yesterday, current_step=3)
         NightPass.objects.filter(pass_id=old_pass.pass_id).update(
@@ -133,17 +133,16 @@ class UnifiedNightPassPolicyTests(TestCase):
 
         old_pass.refresh_from_db()
         self.student.refresh_from_db()
-        self.assertFalse(result["status"])
-        self.assertEqual(result["reason_code"], "BLOCKED_MAX_VIOLATIONS")
+        self.assertTrue(result["status"])
         self.assertFalse(old_pass.valid)
         self.assertIn("LATE_HOSTEL_IN", old_pass.violation_code or "")
         self.assertEqual(self.student.violation_flags, 1)
-        self.assertFalse(self.student.has_booked)
+        self.assertTrue(self.student.has_booked)
         self.assertTrue(self.student.is_checked_in)
-        self.assertEqual(NightPass.objects.filter(user=self.student_user, valid=True).count(), 0)
+        self.assertEqual(NightPass.objects.filter(user=self.student_user, valid=True).count(), 1)
 
     def test_admin_allow_preserves_violation_history_and_reopens_booking(self):
-        self.student.violation_flags = 1
+        self.student.violation_flags = self.settings.max_violation_count
         self.student.save(update_fields=["violation_flags"])
         incident = self._create_pass(current_step=3, valid=False)
         NightPass.objects.filter(pass_id=incident.pass_id).update(
@@ -152,6 +151,10 @@ class UnifiedNightPassPolicyTests(TestCase):
             defaulter_remarks="Late Hostel IN",
             violation_time=self.now,
         )
+
+        blocked = create_pass_for_student(self.student_user, self.hostel_resource)
+        self.assertFalse(blocked["status"])
+        self.assertEqual(blocked["reason_code"], "BLOCKED_MAX_VIOLATIONS")
 
         admin_user = CustomUser.objects.create_user(
             email="admin-user@example.com",
@@ -278,8 +281,22 @@ class UnifiedNightPassPolicyTests(TestCase):
         evaluate_active_pass_deadlines(now=checkout_time + timedelta(minutes=30, seconds=1))
         self.student.refresh_from_db()
         user_pass.refresh_from_db()
-        self.assertTrue(user_pass.defaulter)
+        self.assertFalse(user_pass.defaulter)
         self.assertIn("LATE_LIBRARY_IN", user_pass.violation_code or "")
+        self.assertEqual(self.student.violation_flags, 1)
+
+    def test_deadline_marks_defaulter_when_configured_limit_is_reached(self):
+        self.settings.max_violation_count = 1
+        self.settings.save(update_fields=["max_violation_count"])
+        user_pass = self._create_pass(current_step=1)
+        checkout_time = self.now - timedelta(minutes=31)
+        NightPass.objects.filter(pass_id=user_pass.pass_id).update(hostel_checkout_time=checkout_time)
+
+        evaluate_active_pass_deadlines(now=self.now)
+
+        self.student.refresh_from_db()
+        user_pass.refresh_from_db()
+        self.assertTrue(user_pass.defaulter)
         self.assertEqual(self.student.violation_flags, 1)
 
     def test_cancel_respects_configured_slot_cancel_timer(self):

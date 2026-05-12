@@ -1,6 +1,7 @@
 from django import template
 from django.db.models import Count, Q
 
+from apps.global_settings.models import Settings
 from apps.users.models import Student
 
 
@@ -24,8 +25,10 @@ def top_defaulter_students(limit=5):
 
 @register.simple_tag
 def top_blocked_students(limit=5):
+    policy = Settings.current()
+    max_violations = int(policy.max_violation_count) if policy and policy.max_violation_count is not None else 3
     return (
         Student.objects.select_related("hostel")
-        .filter(violation_flags__gt=0)
+        .filter(violation_flags__gte=max_violations)
         .order_by("-violation_flags", "name")[:limit]
     )
