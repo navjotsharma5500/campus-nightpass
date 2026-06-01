@@ -34,6 +34,14 @@ def json_response(data):
     return HttpResponse(json.dumps(data, default=str), content_type="application/json")
 
 
+def _excel_datetime(value):
+    if not value:
+        return ""
+    if timezone.is_aware(value):
+        value = timezone.localtime(value)
+    return value.replace(tzinfo=None)
+
+
 DASHBOARD_VIEW_ONLY_GROUP = "dashboard_view_only"
 
 
@@ -403,10 +411,10 @@ def download_report_range(request):
             student.name,
             student.registration_number,
             student.hostel.name if student.hostel else "",
-            p.hostel_checkout_time,
-            p.library_in_time,
-            p.library_out_time,
-            p.hostel_checkin_time,
+            _excel_datetime(p.hostel_checkout_time),
+            _excel_datetime(p.library_in_time),
+            _excel_datetime(p.library_out_time),
+            _excel_datetime(p.hostel_checkin_time),
             p.current_step,
             p.valid,
             p.defaulter,

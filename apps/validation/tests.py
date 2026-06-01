@@ -116,3 +116,26 @@ class AdminDashboardEnhancementTests(TestCase):
 
         self.assertEqual(status, "Library IN")
 
+    def test_download_report_range_handles_timezone_aware_datetimes(self):
+        today = timezone.localdate()
+        now = timezone.now()
+        user_pass = self._create_pass(self.student_user_today, today, current_step=4, valid=False)
+        NightPass.objects.filter(pass_id=user_pass.pass_id).update(
+            hostel_checkout_time=now,
+            library_in_time=now + timedelta(minutes=10),
+            library_out_time=now + timedelta(hours=1),
+            hostel_checkin_time=now + timedelta(hours=1, minutes=20),
+        )
+
+        response = self.client.get(
+            reverse("download_report_range"),
+            {"start_date": today.isoformat(), "end_date": today.isoformat()},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response["Content-Type"],
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        self.assertGreater(len(response.content), 0)
+
