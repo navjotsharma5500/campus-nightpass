@@ -84,7 +84,7 @@
         <div><strong>Scanner:</strong> {{ security_location }}</div>
         <div><strong>Window:</strong> {{ scan_window_text }}</div>
     </div>
-    <button class="logout-button" onclick="location.href='/logout'">Logout</button>
+    <button class="logout-button" onclick="location.href='{% url 'logout' %}'">Logout</button>
 </div>
 
 <div class="main-layout">
@@ -285,7 +285,7 @@
         startCooldown();
         $.ajax({
             method: "POST",
-            url: "/access/extension/fetchuser/performtask/",
+            url: "{% url 'kiosk_extension' %}",
             dataType: "json",
             data: { registration_number: registration },
             success: handleFetchSuccess,
@@ -366,7 +366,7 @@
             btn.text("CHECK IN").show().off().on('click', () => runAction('checkin', user.registration_number));
         }
 
-        new Audio("/static/validation/beep.mp3").play().catch(()=>{});
+        new Audio("{% static 'validation/beep.mp3' %}").play().catch(()=>{});
         resetTimer = setTimeout(resetDisplay, 10000);
     }
 

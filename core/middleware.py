@@ -11,9 +11,10 @@ class RedirectUserMiddleware:
         throttle_key = "nightpass:deadline-eval:last-run"
         now = timezone.now()
         last_run = cache.get(throttle_key)
+        # PATH_INFO excludes FORCE_SCRIPT_NAME for either deployment.
         excluded_prefixes = ("/admin", "/static/", "/media/")
         if (
-            not request.path.startswith(excluded_prefixes)
+            not request.path_info.startswith(excluded_prefixes)
             and (not last_run or (now - last_run).total_seconds() >= 60)
         ):
             from apps.users.services.deadline_evaluator import evaluate_active_pass_deadlines
@@ -31,10 +32,10 @@ class RedirectUserMiddleware:
             user
             and user.is_authenticated
             and getattr(user, "user_type", None) == "security"
-            and not request.path.startswith("/access")
-            and not request.path.startswith("/logout")
-            and not request.path.startswith("/admin/logout")
+            and not request.path_info.startswith("/access")
+            and not request.path_info.startswith("/logout")
+            and not request.path_info.startswith("/admin/logout")
         ):
-            return redirect("/access")
+            return redirect("scanner")
 
         return self.get_response(request)

@@ -426,7 +426,7 @@ class StudentAdmin(ImportExportModelAdmin):
             return redirect("admin:users_student_changelist")
 
         login(request, student.user, backend="django.contrib.auth.backends.ModelBackend")
-        return redirect("/")
+        return redirect("home")
 
     class Media:
         css = {"all": ("admin/custom_admin_dashboard.css",)}

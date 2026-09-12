@@ -1,6 +1,7 @@
 from datetime import time, timedelta
 
 from django.test import SimpleTestCase, TestCase
+from django.conf import settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -8,6 +9,11 @@ from apps.global_settings.models import Settings
 from apps.nightpass.models import CampusResource, Hostel
 from apps.users.models import CustomUser, NightPass, Student
 from apps.users.services.pass_policy import get_dashboard_status, get_scanner_status, step_label
+
+
+def client_path(*args, **kwargs):
+    """Test Client takes PATH_INFO without the deployment script prefix."""
+    return reverse(*args, **kwargs).removeprefix(settings.FORCE_SCRIPT_NAME or "")
 
 
 class LifecycleServiceTests(SimpleTestCase):
@@ -88,7 +94,7 @@ class AdminDashboardEnhancementTests(TestCase):
         self._create_pass(self.student_user_today, today)
         self._create_pass(self.student_user_old, yesterday)
 
-        response = self.client.get(reverse("admin_dashboard"), {"date": today.isoformat()})
+        response = self.client.get(client_path("admin_dashboard"), {"date": today.isoformat()})
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Today Student")
@@ -128,7 +134,7 @@ class AdminDashboardEnhancementTests(TestCase):
         )
 
         response = self.client.get(
-            reverse("download_report_range"),
+            client_path("download_report_range"),
             {"start_date": today.isoformat(), "end_date": today.isoformat()},
         )
 

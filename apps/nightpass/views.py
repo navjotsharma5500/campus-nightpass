@@ -24,7 +24,7 @@ def campus_resources_home(request):
     if user.user_type == 'student':
         if not hasattr(user, "student"):
             messages.error(request, "Student profile is missing for this account. Please contact the administrator.")
-            return redirect('/logout')
+            return redirect('logout')
         user_pass = get_active_pass_for_user(user)
         user_incidents = NightPass.objects.filter(user=user).filter(
             Q(defaulter=True) | Q(violation_code__gt="")
@@ -65,9 +65,9 @@ def campus_resources_home(request):
             },
         )
     elif user.user_type == 'security':
-        return redirect('/access')
+        return redirect('scanner')
     elif user.user_type == 'admin':
-        return redirect('/access/admin-dashboard')
+        return redirect('admin_dashboard')
 
 
 @csrf_exempt
@@ -128,7 +128,7 @@ def hostel_home(request):
     if user.user_type == 'security':
         security_profile = getattr(request.user, "security", None)
         if not security_profile or security_profile.scanner_type != "HOSTEL":
-            return redirect('/access')
+            return redirect('scanner')
         hostel = security_profile.hostel
         if hostel:
             hostel_passes = NightPass.objects.filter(valid=True, user__student__hostel=hostel) | NightPass.objects.filter(date=date.today(), user__student__hostel=hostel)
@@ -136,7 +136,7 @@ def hostel_home(request):
             hostel_passes = NightPass.objects.filter(valid=True) | NightPass.objects.filter(date=date.today())
         return render(request, 'caretaker.html', {'hostel_passes': hostel_passes})
     else:
-        return redirect('/access')
+        return redirect('scanner')
 
 
 def creators_page(request):

@@ -146,7 +146,7 @@ function openModal(name, description, picture, isBooking) {
     document.getElementById('modal-resource-picture').src = picture;
 
     let btn = document.getElementById('modal-resource-book');
-    let url = isBooking ? "book/" + encodeURIComponent(name) : "cancel/";
+    let url = isBooking ? "{% url 'generate_pass' '__resource__' %}".replace("__resource__", encodeURIComponent(name)) : "{% url 'cancel_pass' %}";
     let confirmMsg = isBooking ? "Do you want to book this slot?" : "Cancel your booking?";
 
     btn.innerText = isBooking ? "Confirm Booking" : "Confirm Cancellation";
@@ -177,7 +177,7 @@ function checkStatusUpdate() {
     
     // Replace URL with your actual endpoint that returns the current_step for the logged-in user
     $.ajax({
-        url: "/access/get_status_json/", 
+        url: "{% url 'get_status_json' %}",
         method: "GET",
         success: function(response) {
             // If the step in DB is different from what's currently rendered, refresh the page
@@ -186,7 +186,7 @@ function checkStatusUpdate() {
             }
         },
         error: function() {
-            console.log("Status check failed. Ensure /access/get_status_json/ exists.");
+            console.log("Status check failed. Ensure {% url 'get_status_json' %} exists.");
         }
     });
 }

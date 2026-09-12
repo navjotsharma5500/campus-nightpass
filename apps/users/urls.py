@@ -2,11 +2,11 @@ from django.urls import path
 from .views import *
 
 urlpatterns = [
-    path('login/', login_user),
-    path('logout/', logout_user),
+    path('login/', login_user, name="login"),
+    path('logout/', logout_user, name="logout"),
 
-    path('accounts/google/login/', gauth),
-    path('accounts/google/login/callback/', oauth_callback),
+    path('accounts/google/login/', gauth, name="google_login"),
+    path('accounts/google/login/callback/', oauth_callback, name="google_callback"),
     path('superuser/violations/', superuser_violations, name='superuser_violations'),
     path('superuser/violations/<str:registration_number>/', superuser_violation_detail, name='superuser_violation_detail'),
     path('superuser/defaulters/', superuser_defaulters, name='superuser_defaulters'),

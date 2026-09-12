@@ -23,12 +23,12 @@ DASHBOARD_VIEW_ONLY_GROUP = 'dashboard_view_only'
 
 def get_post_login_redirect(user):
     if getattr(user, 'user_type', None) == 'admin':
-        return '/access/admin-dashboard'
+        return reverse('admin_dashboard')
     if getattr(user, 'user_type', None) == 'security':
         if user.groups.filter(name=DASHBOARD_VIEW_ONLY_GROUP).exists():
-            return '/access/admin-dashboard'
-        return '/access'
-    return '/'
+            return reverse('admin_dashboard')
+        return reverse('scanner')
+    return reverse('home')
 
 
 def is_super_admin(user):
@@ -86,7 +86,6 @@ def _allow_students(students, admin_user):
 
 def gauth(request):
     # Load configuration from JSON file
-    print(request.build_absolute_uri('/accounts/google/login/callback/'))
     params = {
         'scope': 'profile email',
         'access_type': 'offline',
@@ -94,7 +93,7 @@ def gauth(request):
         'include_granted_scopes': 'true',
         'response_type': 'code',
         'state': 'state_parameter_passthrough_value',
-        'redirect_uri': request.build_absolute_uri('/accounts/google/login/callback/'),
+        'redirect_uri': request.build_absolute_uri(reverse('google_callback')),
         'client_id': config['web']['client_id'],
     }
 
@@ -138,7 +137,7 @@ def oauth_callback(request):
         # Your client credentials
         client_id = config['web']['client_id']
         client_secret = config['web']['client_secret']
-        redirect_uri = request.build_absolute_uri('/accounts/google/login/callback/')
+        redirect_uri = request.build_absolute_uri(reverse('google_callback'))
 
         # Build the POST data
         post_data = {
@@ -164,11 +163,11 @@ def oauth_callback(request):
                 return HttpResponseRedirect(get_post_login_redirect(user))
             else:
                 messages.error(request, 'Please use Thapar ID or contact DOSA office.')
-                return HttpResponseRedirect('/')
+                return redirect('home')
         else:
             # Handle the case when the token request fails
             messages.error(request, 'Service unavailable. Please try again later')
-            return HttpResponseRedirect('/')
+            return redirect('home')
     else:
         # Handle the case when 'code' parameter is not present
         return HttpResponse('Error: Authorization code not found in GET parameters.')
@@ -188,7 +187,7 @@ def login_user(request):
 
 def logout_user(request):
     logout(request)
-    return redirect('/login')
+    return redirect('login')
 
 
 @csrf_exempt
@@ -362,7 +361,7 @@ def superuser_defaulter_detail(request, registration_number):
 @user_passes_test(is_super_admin)
 def superuser_allow_student_record(request, registration_number):
     if request.method != "POST":
-        return redirect("/admin/")
+        return redirect("admin:index")
 
     student = get_object_or_404(Student, registration_number=registration_number)
     _allow_students([student], request.user)

@@ -103,7 +103,7 @@
 
 <img class="header-logo" src="{% static 'thapar_logo.png' %}" alt="College Logo">
         <h1>CAMPUS LIBRARY NIGHT PASS</h1>
-        <a class="logout-button" style="visibility: hidden;" href="/logout">Logout</a>
+        <a class="logout-button" style="visibility: hidden;" href="{% url 'logout' %}">Logout</a>
     </div>
 
 
@@ -113,7 +113,7 @@
          Book your library night pass to access campus resources and facilities.
          Enjoy a seamless experience!
        </p>
-       <form action="/login/" method="post">
+       <form action="{% url 'login' %}" method="post">
          <button class="primary-btn" inputmode="login-button" type="submit">Get Started</button>
        </form>
     </div>

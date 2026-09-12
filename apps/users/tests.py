@@ -2,6 +2,7 @@ from datetime import datetime, time, timedelta
 from unittest.mock import patch
 
 from django.test import TestCase
+from django.conf import settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -17,6 +18,11 @@ from apps.validation.services.lifecycle import (
     transition_checkout_from_library,
 )
 from apps.validation.services.scan_service import process_scan
+
+
+def client_path(*args, **kwargs):
+    """Test Client takes PATH_INFO without the deployment script prefix."""
+    return reverse(*args, **kwargs).removeprefix(settings.FORCE_SCRIPT_NAME or "")
 
 
 class UnifiedNightPassPolicyTests(TestCase):
@@ -163,7 +169,7 @@ class UnifiedNightPassPolicyTests(TestCase):
         )
         self.client.force_login(admin_user)
         response = self.client.post(
-            reverse("superuser_allow_student_record", args=[self.student.registration_number]),
+            client_path("superuser_allow_student_record", args=[self.student.registration_number]),
             {"next": reverse("superuser_violations")},
         )
 
@@ -308,7 +314,7 @@ class UnifiedNightPassPolicyTests(TestCase):
         )
 
         with patch("apps.nightpass.views.timezone.now", return_value=blocked_now):
-            response = self.client.get(reverse("cancel_pass"))
+            response = self.client.get(client_path("cancel_pass"))
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("Cannot cancel pass after 8:00 PM", response.content.decode())
