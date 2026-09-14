@@ -278,6 +278,16 @@ class StudentResource(resources.ModelResource):
 # ==============================
 
 class StudentAdmin(ImportExportModelAdmin):
+    change_list_template = "admin/users/student/change_list.html"
+
+    def changelist_view(self, request, extra_context=None):
+        from .student_sync_admin import can_sync
+        return super().changelist_view(request, {**(extra_context or {}), "can_student_sync": can_sync(self, request)})
+
+    def student_data_sync(self, request):
+        from .student_sync_admin import student_sync_view
+        return student_sync_view(self, request)
+
     resource_class = StudentResource
     class StudentAdminForm(forms.ModelForm):
         user = forms.ModelChoiceField(
@@ -321,6 +331,7 @@ class StudentAdmin(ImportExportModelAdmin):
 
     def get_urls(self):
         custom = [
+            path("data-sync/", self.admin_site.admin_view(self.student_data_sync), name="users_student_data_sync"),
             path(
                 "impersonate/<str:registration_number>/",
                 self.admin_site.admin_view(self.impersonate_student),

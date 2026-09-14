@@ -264,3 +264,16 @@ EXPLORER_CONNECTIONS = {}
 
 SESSION_ENGINE = "django.contrib.sessions.backends.db"
 SESSION_COOKIE_AGE = 86400
+
+# Summary-only logging for the Student Data Sync admin feature.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {"student_sync": {"format": "{asctime} {levelname} {message}", "style": "{"}},
+    "handlers": {"student_sync_console": {"class": "logging.StreamHandler", "formatter": "student_sync"}},
+    "loggers": {
+        "apps.users.student_sync": {
+            "handlers": ["student_sync_console"], "level": "INFO", "propagate": False,
+        },
+    },
+}
