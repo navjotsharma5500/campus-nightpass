@@ -9,9 +9,11 @@ New students require registration_number and name. Existing registration numbers
 Absent columns are preserved; blank optional values clear fields, except pictures which are preserved by default.</p>
 <p>Hostel mode requires email,hostel,room_number. Picture mode requires email,picture. Columns outside the selected mode are ignored and listed in Preview.
 Hostel names must match exactly. Unknown students in these two modes are errors. Any validation error blocks the entire file.</p>
+<p>Picture headers accepted (case-insensitive): picture, URL, picture_url, image_url. Supply only one picture column.</p>
 {% if error %}<p class="errornote">{{ error }}</p>{% endif %}
 {% if plan %}
 <h2>Preview: {{ filename }} ({{ mode }})</h2>
+{% if plan.picture_source %}<p>Mapped picture column: {{ plan.picture_source }} → picture.</p>{% endif %}
 {% if plan.ignored_columns %}<p class="warning">Ignored columns: {{ plan.ignored_columns|join:", " }}. These columns will not be imported. Check for misspelled field names.</p>{% endif %}
 <p>Validation duration: {{ duration }} seconds. No student or user data has been written.</p>
 <table><tbody>{% for label, count in counts %}<tr><th>{{ label }}</th><td>{{ count }}</td></tr>{% endfor %}</tbody></table>

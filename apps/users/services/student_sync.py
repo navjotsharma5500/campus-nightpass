@@ -17,6 +17,7 @@ logger = logging.getLogger("apps.users.student_sync")
 BATCH_SIZE = 500
 MAX_ROWS = 20000
 MAX_BYTES = 10 * 1024 * 1024
+PICTURE_HEADERS = {"picture", "url", "picture_url", "image_url"}
 FIELDS = {
     "full": {"email", "registration_number", "name", "hostel", "room_number",
              "gender", "contact_number", "parent_contact", "year", "picture"},
@@ -27,6 +28,17 @@ FIELDS = {
 
 def normalize_email(value):
     return (value or "").strip().lower()
+
+
+def normalize_headers(headers):
+    normalized = [header.strip().lower() for header in headers]
+    picture_sources = [header for header, name in zip(headers, normalized) if name in PICTURE_HEADERS]
+    if len(picture_sources) > 1:
+        raise ValidationError("Ambiguous picture columns: " + ", ".join(picture_sources)
+                              + ". Supply only one of picture, url, picture_url, image_url.")
+    if not all(normalized) or len(set(normalized)) != len(normalized):
+        raise ValidationError("Headers must be nonblank and unique.")
+    return ["picture" if name in PICTURE_HEADERS else name for name in normalized]
 
 
 def read_upload(upload):
@@ -55,9 +67,7 @@ def _read_rows(rows):
     if not header:
         raise ValidationError("File is empty.")
     header = [str(value or "").strip() for value in header]
-    normalized = [value.lower() for value in header]
-    if not all(header) or len(set(normalized)) != len(header):
-        raise ValidationError("Headers must be nonblank and unique.")
+    normalized = normalize_headers(header)
     result = []
     for number, values in enumerate(rows, 2):
         values = [str(value).strip() if value is not None else "" for value in values]
@@ -76,6 +86,7 @@ def _read_rows(rows):
 @dataclass
 class Plan:
     ignored_columns: list = field(default_factory=list)
+    picture_source: str = ""
     counts: dict = field(default_factory=lambda: dict.fromkeys((
         "total_rows", "valid_rows", "duplicate_emails", "duplicate_registration_numbers",
         "missing_emails", "unknown_hostels", "conflicting_admin_security_emails",
@@ -96,9 +107,7 @@ def preview_sync(headers, rows, mode, clear="none", allow_blank_picture=False, l
     if mode != "picture" and allow_blank_picture:
         raise ValidationError("Blank picture clearing is available only in picture mode.")
     original_headers = headers
-    headers = [header.strip().lower() for header in headers]
-    if not all(headers) or len(set(headers)) != len(headers):
-        raise ValidationError("Headers must be nonblank and unique.")
+    headers = normalize_headers(headers)
     required = {"email"} if mode == "full" else FIELDS[mode]
     if not required.issubset(headers):
         raise ValidationError("Missing required columns: " + ", ".join(sorted(required - set(headers))))
@@ -125,7 +134,9 @@ def preview_sync(headers, rows, mode, clear="none", allow_blank_picture=False, l
     hostels = {hostel.name: hostel.pk for hostel in Hostel.objects.all()}
     emails = Counter(normalize_email(row.get("email")) for row in rows)
     regs = Counter(row.get("registration_number", "").strip() for row in rows) if mode == "full" else Counter()
-    plan = Plan(ignored_columns=[name for name in original_headers if name.strip().lower() not in FIELDS[mode]])
+    plan = Plan(ignored_columns=[source for source, name in zip(original_headers, headers) if name not in FIELDS[mode]])
+    if "picture" in FIELDS[mode] and "picture" in headers:
+        plan.picture_source = original_headers[headers.index("picture")]
     counts = plan.counts
     counts["total_rows"] = len(rows)
     counts["duplicate_emails"] = sum(n > 1 for email, n in emails.items() if email)

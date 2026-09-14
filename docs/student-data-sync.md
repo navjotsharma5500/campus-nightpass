@@ -124,6 +124,12 @@ values to clear existing pictures** is checked (default off). No images are
 downloaded and no ImageKit calls occur. URLs must fit the existing field's 200
 character limit. All uploaded emails must resolve to existing students.
 
+In full and picture modes, `picture`, `URL`, `picture_url` and `image_url` are
+case-insensitive aliases for the picture field. Preview shows the original source
+header mapped to `picture`, rather than listing it as ignored. Supplying more than
+one picture alias in a file is rejected as ambiguous. Blank values retain the same
+preserve/explicit-clear behavior for every alias.
+
 Each mode processes only its recognized fields. Other columns, including
 `Caretaker Name` and `user`, are safely ignored; their original names are shown in
 an **Ignored columns** preview warning so typos remain visible. Ignored values are

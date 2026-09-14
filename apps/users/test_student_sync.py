@@ -11,7 +11,7 @@ from django.contrib.auth.models import Permission
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
@@ -236,6 +236,8 @@ class StudentSyncTests(TestCase):
 
 
 class StudentSyncAdminTests(TestCase):
+    REAL_HEADERS = "registration_number,name,hostel,Caretaker Name,gender,room_number,contact_number,email,parent_contact,year,user,URL"
+
     def setUp(self):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
@@ -435,3 +437,110 @@ class StudentSyncAdminTests(TestCase):
         self.client.logout()
         self.client.force_login(self.admin)
         self.assertEqual(self.client.post(self.url, {"payload": token, "action": "apply"}).status_code, 403)
+
+    def real_picture_file(self, picture):
+        return (self.REAL_HEADERS + "\n001,Updated,Annual,Caretaker,F,202,123,real@example.com,456,2,"
+                + str(self.admin.pk) + "," + picture + "\n").encode()
+
+    def create_real_picture_student(self):
+        hostel = Hostel.objects.create(name="Annual", email="hostel@example.com", contact_number="123")
+        user = CustomUser.objects.create_user("real@example.com", None)
+        return Student.objects.create(user=user, registration_number="001", name="Original", hostel=hostel,
+                                      picture="https://example.com/original.jpg")
+
+    def test_real_url_header_updates_picture_in_both_modes_and_formats(self):
+        from openpyxl import Workbook
+        from apps.users.services.student_sync_storage import decode_token, read_preview
+        student = self.create_real_picture_student()
+        for mode in ("picture", "full"):
+            for extension in ("csv", "xlsx"):
+                with self.subTest(mode=mode, extension=extension):
+                    before = Student.objects.values().get(pk=student.pk)
+                    picture = f"https://example.com/{mode}-{extension}.jpg"
+                    data = self.real_picture_file(picture)
+                    if extension == "xlsx":
+                        book = Workbook()
+                        for line in data.decode().splitlines():
+                            book.active.append(line.split(","))
+                        output = io.BytesIO()
+                        book.save(output)
+                        data = output.getvalue()
+                    response = self.client.post(self.url, {"mode": mode, "file": SimpleUploadedFile(f"real.{extension}", data)})
+                    self.assertContains(response, "Mapped picture column: URL → picture")
+                    plan = response.context["plan"]
+                    self.assertFalse(plan.errors)
+                    self.assertNotIn("URL", plan.ignored_columns)
+                    self.assertIn("Caretaker Name", plan.ignored_columns)
+                    self.assertIn("user", plan.ignored_columns)
+                    token = response.context["payload"]
+                    stored = read_preview(decode_token(token, self.admin.pk, self.client.session.session_key))
+                    self.assertEqual(stored["rows"][0]["picture"], picture)
+                    self.assertNotIn("url", stored["rows"][0])
+                    self.assertNotIn("user", stored["rows"][0])
+                    self.assertNotIn("caretaker name", stored["rows"][0])
+                    result = self.client.post(self.url, {"payload": token, "action": "apply"})
+                    self.assertEqual(result.status_code, 302)
+                    after = Student.objects.values().get(pk=student.pk)
+                    self.assertEqual(after["picture"], picture)
+                    self.assertEqual(after["user_id"], before["user_id"])
+                    if mode == "picture":
+                        before["picture"] = picture
+                        self.assertEqual(after, before)
+                    else:
+                        self.assertEqual(after["name"], "Updated")
+
+    def test_real_blank_url_preserves_until_explicit_picture_clear(self):
+        student = self.create_real_picture_student()
+        for mode in ("full", "picture"):
+            response = self.upload(mode, self.real_picture_file(""))
+            self.assertFalse(response.context["plan"].errors)
+            token = response.context["payload"]
+            self.assertEqual(self.client.post(self.url, {"payload": token, "action": "apply"}).status_code, 302)
+            student.refresh_from_db()
+            self.assertEqual(student.picture, "https://example.com/original.jpg")
+        response = self.upload("picture", self.real_picture_file(""))
+        response = self.client.post(self.url, {"payload": response.context["payload"], "action": "preview", "allow_blank_picture": "on"})
+        self.assertEqual(response.context["plan"].counts["pictures_updated"], 1)
+        result = self.client.post(self.url, {"payload": response.context["payload"], "action": "apply", "allow_blank_picture": "on"})
+        self.assertEqual(result.status_code, 302)
+        student.refresh_from_db()
+        self.assertIsNone(student.picture)
+
+    def test_real_headers_with_picture_and_url_are_rejected(self):
+        student = self.create_real_picture_student()
+        lines = self.real_picture_file("https://example.com/url.jpg").decode().splitlines()
+        data = (lines[0] + ",picture\n" + lines[1] + ",https://example.com/picture.jpg\n").encode()
+        for mode in ("full", "picture"):
+            response = self.upload(mode, data)
+            self.assertContains(response, "Ambiguous picture columns: URL, picture")
+            self.assertNotIn("payload", response.context)
+        student.refresh_from_db()
+        self.assertEqual(student.picture, "https://example.com/original.jpg")
+        self.assertEqual(list(self.storage.iterdir()), [])
+
+
+class StudentSyncPictureHeaderTests(SimpleTestCase):
+    def test_all_aliases_are_case_insensitive_and_normalized(self):
+        from openpyxl import Workbook
+        for alias in ("picture", "URL", "PiCtUrE_uRl", "ImAgE_uRl"):
+            for extension in ("csv", "xlsx"):
+                with self.subTest(alias=alias, extension=extension):
+                    if extension == "csv":
+                        data = f"email,{alias}\nstudent@example.com,https://example.com/p.jpg\n".encode()
+                    else:
+                        book = Workbook()
+                        book.active.append(["email", alias])
+                        book.active.append(["student@example.com", "https://example.com/p.jpg"])
+                        output = io.BytesIO()
+                        book.save(output)
+                        data = output.getvalue()
+                    headers, rows = read_upload(SimpleUploadedFile(f"pictures.{extension}", data))
+                    self.assertEqual(headers, ["email", alias])
+                    self.assertEqual(rows, [{"email": "student@example.com", "picture": "https://example.com/p.jpg"}])
+
+    def test_every_duplicate_picture_alias_combination_is_ambiguous(self):
+        from itertools import combinations_with_replacement
+        from apps.users.services.student_sync import normalize_headers
+        for first, second in combinations_with_replacement(("picture", "URL", "picture_url", "image_url"), 2):
+            with self.subTest(first=first, second=second), self.assertRaisesMessage(ValidationError, "Ambiguous picture columns"):
+                normalize_headers(["email", first, second.upper()])
