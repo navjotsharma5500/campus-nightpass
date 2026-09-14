@@ -14,7 +14,7 @@ Requires staff admin access, `users.change_student`, `users.add_student`, and
 Upload a UTF-8 CSV (BOM accepted) or XLSX, select a mode, and validate. Preview
 performs database reads only, reports counts and row errors, and blocks apply if
 any row fails. Up to 200 error messages are displayed; correct the file and repeat
-validation for the rest. Blank physical rows are ignored. Limits: 20,000 data rows,
+validation for the rest. Blank physical rows count as skipped footer rows. Limits: 20,000 physical data rows,
 10 MB input. Parsed rows stay server-side; confirmation uses a small token regardless
 of dataset size.
 
@@ -38,6 +38,26 @@ safely. A failed apply restores the preview for retry until expiry; success remo
 it and redirects. If filesystem cleanup fails after the transaction commits, the
 claim remains unusable and the cleanup failure is logged without reporting a
 database rollback.
+
+### Duplicate and footer rows
+
+Preview separates total physical data rows, rows considered for sync, valid rows,
+unchanged rows, identical duplicate rows skipped, non-student/footer rows skipped,
+conflicting duplicate emails and error rows. Rows considered exclude the two harmless
+skip categories; valid rows include unchanged rows. Harmless skips are not errors.
+
+Repeated normalized emails with identical effective values for the selected mode
+keep the first physical row. Whitespace, email case and accepted gender aliases
+are normalized; columns outside the mode do not create conflicts. Different
+values remain fatal, with conflicting row numbers reported. Registration checks
+run after harmless duplicates are removed. Protected accounts and unknown hostels
+still fail validation, including when their rows are repeated identically.
+
+Only rows with blank normalized email, registration_number **and** name are skipped
+as non-student/footer rows, even if URL contains `2`. Any populated identity field
+keeps a row in normal validation. Blank rows retain their position for reporting.
+Apply repeats these checks using the stored raw student fields inside the existing
+transaction.
 
 ### Temporary storage and cleanup
 
@@ -133,7 +153,9 @@ preserve/explicit-clear behavior for every alias.
 Each mode processes only its recognized fields. Other columns, including
 `Caretaker Name` and `user`, are safely ignored; their original names are shown in
 an **Ignored columns** preview warning so typos remain visible. Ignored values are
-discarded before temporary preview storage and never assigned to models. Blank
+never assigned to models. Recognized student fields are retained in temporary
+preview storage so raw email, registration_number and name can identify student
+rows before mode-specific validation. Unrecognized columns are discarded. Blank
 headers and duplicate headers (after trimming/case normalization) still fail.
 XLSX uses the active sheet;
 store identifiers/phone numbers as text to preserve leading zeros. CSV is always
@@ -164,6 +186,17 @@ are not logged individually. Final UI summaries count actual changed rows, new
 students/users, reused users for new profiles, assignments cleared and duration.
 
 ## Verification
+
+Duplicate/footer hardening: all 55 Student Sync, storage and scale tests pass under
+both `core.settings` (147.513s) and `core.settings_campusconnect` (149.026s).
+The new annual-upload test exercises 13,002 physical rows in CSV and XLSX, in full
+and picture modes: 13,000 valid students, one identical duplicate skipped and one
+identity-free `URL="2"` footer skipped. Apply writes exactly 13,000 students;
+repeat previews report 13,000 unchanged rows. Conflicting pictures, missing email
+with a registration/name, first-row reporting, protected accounts and unknown
+hostels are covered. Both system checks pass. The existing 18-test regression
+suite under each settings module has 16 passes and the same two previously
+documented scan-policy failures below. No protected code was changed.
 
 Hardening verification: all 47 sync, temporary-storage and scale tests pass under
 both `core.settings` and `core.settings_campusconnect`. The combined 65-test runs

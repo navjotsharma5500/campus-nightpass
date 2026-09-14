@@ -111,7 +111,7 @@ class StudentSyncTests(TestCase):
     def test_validation_errors_never_write_even_with_clear_all(self):
         for row in (
             {"email": "student@example.com", "hostel": "Unknown", "room_number": "202"},
-            {"email": "", "hostel": "B", "room_number": "202"},
+            {"email": "", "name": "Malformed Student", "hostel": "B", "room_number": "202"},
             {"email": "missing@example.com", "hostel": "B", "room_number": "202"},
         ):
             before = self.snapshot()
@@ -544,3 +544,94 @@ class StudentSyncPictureHeaderTests(SimpleTestCase):
         for first, second in combinations_with_replacement(("picture", "URL", "picture_url", "image_url"), 2):
             with self.subTest(first=first, second=second), self.assertRaisesMessage(ValidationError, "Ambiguous picture columns"):
                 normalize_headers(["email", first, second.upper()])
+
+class StudentSyncRowHandlingTests(TestCase):
+    """Exercise raw uploads, stored previews and apply in both formats/modes."""
+
+    setUp = StudentSyncAdminTests.setUp
+    create_real_picture_student = StudentSyncAdminTests.create_real_picture_student
+
+    def row_upload(self, mode, extension, rows):
+        headers = ["email", "registration_number", "name", "URL", "gender"]
+        output = io.BytesIO()
+        if extension == "xlsx":
+            from openpyxl import Workbook
+            book = Workbook()
+            for row in [headers] + rows:
+                book.active.append(row)
+            book.save(output)
+            data = output.getvalue()
+        else:
+            import csv
+            stream = io.StringIO()
+            csv.writer(stream).writerows([headers] + rows)
+            data = stream.getvalue().encode()
+        return self.client.post(self.url, {"mode": mode, "file": SimpleUploadedFile(f"annual.{extension}", data)})
+
+    def test_raw_identity_conflicts_and_first_physical_row(self):
+        student = self.create_real_picture_student()
+        for mode in ("picture", "full"):
+            for extension in ("csv", "xlsx"):
+                for identity in (("001", ""), ("", "Student")):
+                    response = self.row_upload(mode, extension, [["", *identity, "2", ""]])
+                    self.assertEqual(response.context["plan"].counts["error_rows"], 1)
+                    self.assertContains(response, "email is required")
+                first = ["real@example.com", "001", "Original", "https://example.com/a.jpg", "M"]
+                second = [" REAL@EXAMPLE.COM ", "001", "Original", "https://example.com/b.jpg", "male"]
+                response = self.row_upload(mode, extension, [["", "", "", "2", ""], first, second])
+                plan = response.context["plan"]
+                self.assertEqual(plan.counts["duplicate_emails"], 1)
+                self.assertEqual(plan.counts["error_rows"], 2)
+                self.assertContains(response, "rows 3, 4")
+                result = self.client.post(self.url, {"payload": response.context["payload"], "action": "apply"})
+                self.assertContains(result, "conflicting duplicate email")
+                student.refresh_from_db()
+                self.assertEqual(student.picture, "https://example.com/original.jpg")
+                # Invalid identical rows still validate the first physical occurrence.
+                first[3] = second[3] = "invalid"
+                response = self.row_upload(mode, extension, [["", "", "", "2", ""], first, second])
+                self.assertEqual(response.context["plan"].counts["identical_duplicate_rows_skipped"], 1)
+                self.assertEqual(response.context["plan"].counts["error_rows"], 1)
+                self.assertTrue(all(error.startswith("Row 3:") for error in response.context["plan"].errors))
+
+    def test_13000_annual_rows_with_duplicate_and_footer(self):
+        for extension in ("csv", "xlsx"):
+            for mode in ("full", "picture"):
+                with self.subTest(mode=mode, extension=extension):
+                    picture = f"https://example.com/{extension}-{mode}.jpg"
+                    rows = [[f"annual{i}@example.com", f"R{i:05}", f"Student {i}", picture, "M"] for i in range(13000)]
+                    rows.append([" ANNUAL0@EXAMPLE.COM ", "R00000", "Student 0", picture, "male"])
+                    if mode == "picture":
+                        rows[-1][1:3] = ["Ignored registration", "Ignored name"]
+                    rows.append(["", "", "", "2", ""])
+                    response = self.row_upload(mode, extension, rows)
+                    plan = response.context["plan"]
+                    self.assertFalse(plan.errors)
+                    for key, value in {"total_rows": 13002, "rows_considered": 13000, "valid_rows": 13000,
+                                       "identical_duplicate_rows_skipped": 1, "footer_rows_skipped": 1,
+                                       "duplicate_emails": 0, "error_rows": 0, "unchanged_rows": 0}.items():
+                        self.assertEqual(plan.counts[key], value, key)
+                    for label in ("Total physical data rows", "Rows considered for sync", "Unchanged rows",
+                                  "Identical duplicate rows skipped", "Non-student/footer rows skipped", "Conflicting duplicate emails"):
+                        self.assertContains(response, label)
+                    result = self.client.post(self.url, {"payload": response.context["payload"], "action": "apply"})
+                    self.assertEqual(result.status_code, 302)
+                    self.assertEqual(Student.objects.count(), 13000)
+                    self.assertEqual(CustomUser.objects.filter(user_type="student").count(), 13000)
+                    self.assertEqual(Student.objects.filter(picture=picture, gender="male").count(), 13000)
+                    repeat = self.row_upload(mode, extension, rows).context["plan"]
+                    self.assertFalse(repeat.errors)
+                    self.assertEqual(repeat.counts["unchanged_rows"], 13000)
+                    self.assertEqual(repeat.counts["students_to_update"], 0)
+
+    def test_identical_duplicates_do_not_bypass_protection_or_unknown_hostels(self):
+        for row in (
+            {"email": self.admin.email, "registration_number": "P", "name": "Protected"},
+            {"email": "new@example.com", "registration_number": "N", "name": "New", "hostel": "Unknown"},
+        ):
+            plan = preview_sync(list(row), [row, row.copy()], "full")
+            self.assertEqual(plan.counts["identical_duplicate_rows_skipped"], 1)
+            self.assertEqual(plan.counts["error_rows"], 1)
+            with self.assertRaises(ValidationError):
+                apply_sync(list(row), [row, row.copy()], "full", actor=self.admin.pk, filename="test.csv")
+        self.assertEqual(Student.objects.count(), 0)

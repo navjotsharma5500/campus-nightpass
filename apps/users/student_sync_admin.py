@@ -10,12 +10,18 @@ from django.shortcuts import redirect
 from django.template.response import TemplateResponse
 from django.urls import reverse
 
-from .services.student_sync import FIELDS, apply_sync, preview_sync, read_upload
+from .services.student_sync import apply_sync, preview_sync, read_upload
 from .services.student_sync_storage import (
     claim_preview, create_preview, decode_token, preview_token, read_preview,
 )
 
 logger = logging.getLogger("apps.users.student_sync")
+COUNT_LABELS = {
+    "total_rows": "Total physical data rows",
+    "rows_considered": "Rows considered for sync",
+    "duplicate_emails": "Conflicting duplicate emails",
+    "footer_rows_skipped": "Non-student/footer rows skipped",
+}
 
 
 class SyncOptions(forms.Form):
@@ -74,7 +80,6 @@ def student_sync_view(model_admin, request):
                 upload = upload_form.cleaned_data["file"]
                 headers, rows = read_upload(upload)
                 mode = upload_form.cleaned_data["mode"]
-                rows = [{key: value for key, value in row.items() if key in FIELDS[mode]} for row in rows]
                 payload = {"headers": headers, "rows": rows, "mode": mode, "filename": upload.name}
                 options = SyncOptions({})
                 options.is_valid()
@@ -96,7 +101,7 @@ def student_sync_view(model_admin, request):
             if not token:
                 metadata = create_preview(payload, request.user.pk, request.session.session_key)
             token = preview_token(metadata, kwargs)
-            context.update({"plan": plan, "counts": [(key.replace("_", " ").capitalize(), value) for key, value in plan.counts.items()],
+            context.update({"plan": plan, "counts": [(COUNT_LABELS.get(key, key.replace("_", " ").capitalize()), value) for key, value in plan.counts.items()],
                             "errors": plan.errors[:200], "error_count": len(plan.errors), "payload": token,
                             "options": options, "mode": payload["mode"], "filename": payload["filename"],
                             "duration": f"{perf_counter() - started:.2f}"})

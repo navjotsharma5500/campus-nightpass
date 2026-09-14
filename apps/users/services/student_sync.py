@@ -72,7 +72,7 @@ def _read_rows(rows):
     for number, values in enumerate(rows, 2):
         values = [str(value).strip() if value is not None else "" for value in values]
         if not any(values):
-            continue
+            values = [""] * len(header)
         if len(values) != len(header):
             raise ValidationError(f"Row {number}: column count does not match header.")
         result.append({key: value for key, value in zip(normalized, values) if key in FIELDS["full"]})
@@ -88,7 +88,9 @@ class Plan:
     ignored_columns: list = field(default_factory=list)
     picture_source: str = ""
     counts: dict = field(default_factory=lambda: dict.fromkeys((
-        "total_rows", "valid_rows", "duplicate_emails", "duplicate_registration_numbers",
+        "total_rows", "rows_considered", "valid_rows", "unchanged_rows",
+        "identical_duplicate_rows_skipped", "footer_rows_skipped", "duplicate_emails",
+        "duplicate_registration_numbers",
         "missing_emails", "unknown_hostels", "conflicting_admin_security_emails",
         "students_to_create", "students_to_update", "users_to_reuse", "users_to_create",
         "skipped_rows", "error_rows", "hostel_assignments_updated", "pictures_updated",
@@ -132,19 +134,49 @@ def preview_sync(headers, rows, mode, clear="none", allow_blank_picture=False, l
             by_student_email[normalize_email(student.email)].append(student)
     protected = set(Admin.objects.values_list("user_id", flat=True)) | set(Security.objects.values_list("user_id", flat=True))
     hostels = {hostel.name: hostel.pk for hostel in Hostel.objects.all()}
-    emails = Counter(normalize_email(row.get("email")) for row in rows)
-    regs = Counter(row.get("registration_number", "").strip() for row in rows) if mode == "full" else Counter()
     plan = Plan(ignored_columns=[source for source, name in zip(original_headers, headers) if name not in FIELDS[mode]])
     if "picture" in FIELDS[mode] and "picture" in headers:
         plan.picture_source = original_headers[headers.index("picture")]
     counts = plan.counts
     counts["total_rows"] = len(rows)
-    counts["duplicate_emails"] = sum(n > 1 for email, n in emails.items() if email)
+    # Keep physical positions, and inspect identity before mode-specific filtering.
+    candidates = []
+    groups = defaultdict(list)
+    effective_fields = sorted(set(headers) & FIELDS[mode])
+    for number, row in enumerate(rows, 2):
+        email = normalize_email(row.get("email"))
+        if not email and not any(row.get(key, "").strip() for key in ("registration_number", "name")):
+            counts["footer_rows_skipped"] += 1
+            continue
+        effective = []
+        for key in effective_fields:
+            value = row.get(key, "").strip()
+            if key == "email":
+                value = email
+            elif key == "gender":
+                value = {"m": "male", "f": "female"}.get(value.lower(), value.lower())
+            effective.append(value)
+        candidates.append((number, row, email))
+        if email:
+            groups[email].append((number, tuple(effective)))
+    conflicts = {email: [number for number, _ in group]
+                 for email, group in groups.items() if len({values for _, values in group}) > 1}
+    retained = []
+    seen = set()
+    for number, row, email in candidates:
+        if email and email in seen and email not in conflicts:
+            counts["identical_duplicate_rows_skipped"] += 1
+            continue
+        seen.add(email)
+        retained.append((number, row))
+    counts["rows_considered"] = len(retained)
+    counts["duplicate_emails"] = len(conflicts)
+    regs = Counter(row.get("registration_number", "").strip() for _, row in retained) if mode == "full" else Counter()
     counts["duplicate_registration_numbers"] = sum(n > 1 for reg, n in regs.items() if reg)
     unknown_hostels = set()
     targets = set()
     users_by_id = {user.pk: user for user in users}
-    for number, row in enumerate(rows, 2):
+    for number, row in retained:
         errors = []
         email = normalize_email(row.get("email"))
         if not email:
@@ -155,8 +187,9 @@ def preview_sync(headers, rows, mode, clear="none", allow_blank_picture=False, l
                 CustomUser._meta.get_field("email").clean(email, None)
             except ValidationError:
                 errors.append("invalid email (maximum 100 characters)")
-        if email and emails[email] > 1:
-            errors.append(f"duplicate email: {email}")
+        if email in conflicts:
+            positions = ", ".join(map(str, conflicts[email]))
+            errors.append(f"conflicting duplicate email: {email} (rows {positions})")
         matches = by_email.get(email, [])
         student_matches = by_student_email.get(email, [])
         user = matches[0] if len(matches) == 1 else None
@@ -238,10 +271,11 @@ def preview_sync(headers, rows, mode, clear="none", allow_blank_picture=False, l
         counts["hostel_assignments_updated"] += bool({"hostel_id", "room_number"} & changed.keys())
         counts["pictures_updated"] += "picture" in changed
         if not changed:
-            counts["skipped_rows"] += 1
+            counts["unchanged_rows"] += 1
         plan.entries.append((student, user, email, changed))
     counts["unknown_hostels"] = len(unknown_hostels)
-    counts["skipped_rows"] += counts["error_rows"]
+    counts["skipped_rows"] = (counts["unchanged_rows"] + counts["error_rows"]
+                              + counts["identical_duplicate_rows_skipped"] + counts["footer_rows_skipped"])
     assigned = [s for s in students if s.hostel_id is not None or s.room_number is not None]
     counts["existing_assignments"] = len(assigned)
     counts["absent_assignments"] = sum(s.pk not in plan.student_ids for s in assigned)
