@@ -1,4 +1,8 @@
 import io
+from pathlib import Path
+import random
+import string
+import tempfile
 from datetime import time
 from unittest.mock import patch
 
@@ -7,7 +11,7 @@ from django.contrib.auth.models import Permission
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
@@ -233,6 +237,12 @@ class StudentSyncTests(TestCase):
 
 class StudentSyncAdminTests(TestCase):
     def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.storage = Path(directory.name)
+        storage_settings = override_settings(STUDENT_SYNC_TEMP_DIR=directory.name)
+        storage_settings.enable()
+        self.addCleanup(storage_settings.disable)
         self.admin = CustomUser.objects.create_superuser("admin@example.com", "password")
         self.client.force_login(self.admin)
         self.url = reverse("admin:users_student_data_sync").removeprefix(settings.FORCE_SCRIPT_NAME or "")
@@ -318,3 +328,110 @@ class StudentSyncAdminTests(TestCase):
             response = self.client.post(self.url, {"payload": token, "action": "apply"})
         self.assertContains(response, "Preview expired or invalid")
         self.assertEqual(Student.objects.count(), 0)
+
+    def test_extra_csv_and_xlsx_columns_are_ignored_and_reported(self):
+        from openpyxl import Workbook
+        from apps.users.services.student_sync_storage import decode_token, read_preview
+        hostel = Hostel.objects.create(name="Annual", email="hostel@example.com", contact_number="123")
+        headers = ["email", "registration_number", "name", "hostel", "Caretaker Name", "user", "picture"]
+        for i, extension in enumerate(("csv", "xlsx")):
+            values = [f"annual{i}@example.com", f"A{i}", "Annual Student", "Annual", "Do Not Store", str(self.admin.pk), "https://example.com/photo.jpg"]
+            if extension == "csv":
+                data = (",".join(headers) + "\n" + ",".join(values) + "\n").encode()
+            else:
+                workbook = Workbook()
+                workbook.active.append(headers)
+                workbook.active.append(values)
+                output = io.BytesIO()
+                workbook.save(output)
+                data = output.getvalue()
+            with self.subTest(extension=extension):
+                response = self.client.post(self.url, {"mode": "full", "file": SimpleUploadedFile(f"annual.{extension}", data)})
+                self.assertContains(response, "Ignored columns: Caretaker Name, user")
+                self.assertFalse(response.context["plan"].errors)
+                token = response.context["payload"]
+                stored = read_preview(decode_token(token, self.admin.pk, self.client.session.session_key))
+                self.assertNotIn("user", stored["rows"][0])
+                self.assertNotIn("caretaker name", stored["rows"][0])
+                response = self.client.post(self.url, {"payload": token, "action": "apply"})
+                self.assertEqual(response.status_code, 302)
+                student = Student.objects.get(pk=f"A{i}")
+                self.assertEqual(student.user.email, values[0])
+                self.assertNotEqual(student.user_id, self.admin.pk)
+                self.assertEqual(student.hostel_id, hostel.pk)
+                self.assertEqual(student.picture, values[-1])
+                self.assertEqual(student.name, "Annual Student")
+
+    def test_mode_ignored_columns_and_header_errors(self):
+        user = CustomUser.objects.create_user("student@example.com", None)
+        Student.objects.create(user=user, registration_number="001", name="Preserve")
+        response = self.upload("picture", b"email,picture,name,Caretaker Name,user\nstudent@example.com,https://example.com/p.jpg,Ignore,Ignore,1\n")
+        self.assertContains(response, "Ignored columns: name, Caretaker Name, user")
+        self.client.post(self.url, {"payload": response.context["payload"], "action": "apply"})
+        self.assertEqual(Student.objects.get(pk="001").name, "Preserve")
+        for data in (
+            b"email,name,registration_number,user,USER\na@example.com,A,001,1,2\n",
+            b"email,name,registration_number, \na@example.com,A,001,1\n",
+        ):
+            with self.subTest(data=data):
+                response = self.upload(data=data)
+                self.assertContains(response, "Headers must be nonblank and unique")
+
+    def test_large_preview_uses_small_token_and_server_file(self):
+        from django.core import signing
+        from apps.users.services.student_sync_storage import decode_token, read_preview
+        generator = random.Random(2026)
+        rows = [{"email": f"large{i}@example.com", "registration_number": f"L{i}",
+                 "name": "".join(generator.choices(string.ascii_letters, k=90)),
+                 "picture": "https://example.com/" + "".join(generator.choices(string.ascii_letters + string.digits, k=165))}
+                for i in range(15000)]
+        self.assertGreater(len(signing.dumps({"rows": rows}, compress=True)), 1800000)
+        data = "email,registration_number,name,picture\n" + "\n".join(",".join(row.values()) for row in rows)
+        self.assertLess(len(data.encode()), 10 * 1024 * 1024)
+        response = self.upload(data=data.encode())
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["plan"].counts["valid_rows"], 15000)
+        token = response.context["payload"]
+        self.assertLess(len(token), 1000)
+        self.assertLess(len(response.content), 30000)
+        metadata = decode_token(token, self.admin.pk, self.client.session.session_key)
+        self.assertNotIn("rows", metadata)
+        self.assertEqual(read_preview(metadata)["rows"], rows)
+        self.assertEqual(Student.objects.count(), 0)
+        self.assertNotIn("rows", self.client.session)
+
+    def test_success_cleans_temporary_data_and_prevents_replay(self):
+        token = self.upload().context["payload"]
+        self.assertEqual(len(list(self.storage.glob("*.json"))), 1)
+        response = self.client.post(self.url, {"payload": token, "action": "apply"})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(list(self.storage.iterdir()), [])
+        response = self.client.post(self.url, {"payload": token, "action": "apply"})
+        self.assertContains(response, "Preview expired or invalid")
+        self.assertEqual(Student.objects.count(), 1)
+
+    def test_real_expiry_and_tampering_leave_database_unchanged(self):
+        import time
+        token = self.upload().context["payload"]
+        response = self.client.post(self.url, {"payload": token + "x", "action": "apply"})
+        self.assertContains(response, "Preview expired or invalid")
+        with patch("apps.users.services.student_sync_storage.time.time", return_value=time.time() + 1801):
+            response = self.client.post(self.url, {"payload": token, "action": "apply"})
+        self.assertContains(response, "Preview expired or invalid")
+        self.assertEqual(Student.objects.count(), 0)
+
+    def test_failed_revalidation_restores_preview_for_retry(self):
+        token = self.upload().context["payload"]
+        conflict = CustomUser.objects.create_user("NEW@example.com", None, user_type="security")
+        response = self.client.post(self.url, {"payload": token, "action": "apply"})
+        self.assertContains(response, "protected admin/security")
+        self.assertEqual(len(list(self.storage.glob("*.json"))), 1)
+        self.assertEqual(list(self.storage.glob("*.applying")), [])
+        self.assertEqual(Student.objects.count(), 0)
+        self.assertEqual(CustomUser.objects.get(pk=conflict.pk).user_type, "security")
+
+    def test_token_bound_to_login_session(self):
+        token = self.upload().context["payload"]
+        self.client.logout()
+        self.client.force_login(self.admin)
+        self.assertEqual(self.client.post(self.url, {"payload": token, "action": "apply"}).status_code, 403)

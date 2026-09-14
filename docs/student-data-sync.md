@@ -15,7 +15,8 @@ Upload a UTF-8 CSV (BOM accepted) or XLSX, select a mode, and validate. Preview
 performs database reads only, reports counts and row errors, and blocks apply if
 any row fails. Up to 200 error messages are displayed; correct the file and repeat
 validation for the rest. Blank physical rows are ignored. Limits: 20,000 data rows,
-10 MB input and 1.8 MB compressed signed confirmation data. Split larger files.
+10 MB input. Parsed rows stay server-side; confirmation uses a small token regardless
+of dataset size.
 
 Choose mode-specific options on the preview page and update the preview before
 confirming. If options change when Confirm Apply is clicked, the page shows a new
@@ -23,11 +24,43 @@ preview and requires confirmation again. Apply revalidates current database stat
 inside `transaction.atomic()` before any writes; errors roll back the entire sync.
 Counts may change if another administrator changes data between preview and apply.
 
-Preview data is compressed and signed, bound to the administrator and login
-session, and expires after 30 minutes. It travels in a hidden form field; it is not
-encrypted. No uploaded data is persisted in the session/database during preview.
-CSRF protection and admin permission checks apply to both stages. Successful apply
-redirects to avoid browser form resubmission.
+Preview rows are stored as JSON in a private temporary directory shared by workers.
+The form contains only signed metadata: a random 256-bit ID, administrator ID,
+session digest, original creation time, data digest and reviewed options. No file
+path or rows are exposed in the token, and no rows are stored in the Django session
+or database. The token and original preview expire after 30 minutes; updating
+options does not extend that lifetime. CSRF protection and admin permission checks
+apply to both stages.
+
+Apply atomically claims the temporary file before calling the existing atomic sync
+service, which revalidates database state. Concurrent/replayed confirmations fail
+safely. A failed apply restores the preview for retry until expiry; success removes
+it and redirects. If filesystem cleanup fails after the transaction commits, the
+claim remains unusable and the cleanup failure is logged without reporting a
+database rollback.
+
+### Temporary storage and cleanup
+
+By default, storage is an application-specific directory inside the service user's
+system temporary directory. All Gunicorn workers running as the same user on the
+same host use the same directory. It must not be served by the web server. An
+optional Django setting `STUDENT_SYNC_TEMP_DIR` can select a persistent shared path
+if your release layout or worker isolation requires one. On POSIX, the directory
+must belong to the service user with mode 0700; files are created with mode 0600.
+On Windows, use the service user's private temp directory or an equivalent private
+ACL. Multi-host deployments would need a common filesystem directory.
+
+New uploads opportunistically remove expired previews. The following command can
+also run periodically as the service user with the same settings and temp directory:
+
+```sh
+DJANGO_SETTINGS_MODULE=core.settings_campusconnect python manage.py cleanup_student_sync
+```
+
+Cleanup is nonrecursive and only removes regular random-ID preview files older
+than 30 minutes. It skips unrelated filenames and symlinks. Abandoned applying
+claims receive an additional 24-hour grace period before cleanup, to avoid
+interfering with normal in-flight imports. No database migration is needed.
 
 ### Full student sync
 
@@ -91,8 +124,12 @@ values to clear existing pictures** is checked (default off). No images are
 downloaded and no ImageKit calls occur. URLs must fit the existing field's 200
 character limit. All uploaded emails must resolve to existing students.
 
-In hostel and picture modes, other recognized full-sync columns are ignored.
-Unknown column names are rejected to catch typos. XLSX uses the active sheet;
+Each mode processes only its recognized fields. Other columns, including
+`Caretaker Name` and `user`, are safely ignored; their original names are shown in
+an **Ignored columns** preview warning so typos remain visible. Ignored values are
+discarded before temporary preview storage and never assigned to models. Blank
+headers and duplicate headers (after trimming/case normalization) still fail.
+XLSX uses the active sheet;
 store identifiers/phone numbers as text to preserve leading zeros. CSV is always
 available; XLSX uses `openpyxl` if installed, without adding a new dependency.
 
@@ -122,17 +159,25 @@ students/users, reused users for new profiles, assignments cleared and duration.
 
 ## Verification
 
-Final verification: all 32 new functional tests and the 15,000-row scale test pass
+Hardening verification: all 47 sync, temporary-storage and scale tests pass under
+both `core.settings` and `core.settings_campusconnect`. The combined 65-test runs
+each have 63 passes and the two pre-existing scan-policy failures listed below.
+Both failures were reproduced again on untouched commit `065985b` under both
+settings modules. Django system checks pass. The large-preview test uses 15,000
+rows whose previous compressed hidden payload exceeds 1.8 MB; the new token is
+under 1 KB. Storage tests also verify access from a separate Python process.
+
+Initial feature verification: all 32 functional tests and the 15,000-row scale test passed
 with both settings modules. `manage.py check` passes with both settings modules;
 `makemigrations --check --dry-run` reports no changes using an isolated in-memory
 database. No production database was used for testing.
 
 ```sh
 python manage.py check
-python manage.py test apps.users.test_student_sync apps.users.test_student_sync_scale --noinput
+python manage.py test apps.users.test_student_sync apps.users.test_student_sync_storage apps.users.test_student_sync_scale --noinput
 python manage.py test apps.users.tests apps.validation.tests apps.nightpass.tests core.test_urls --noinput
 DJANGO_SETTINGS_MODULE=core.settings_campusconnect python manage.py check
-DJANGO_SETTINGS_MODULE=core.settings_campusconnect python manage.py test apps.users.test_student_sync apps.users.test_student_sync_scale --noinput
+DJANGO_SETTINGS_MODULE=core.settings_campusconnect python manage.py test apps.users.test_student_sync apps.users.test_student_sync_storage apps.users.test_student_sync_scale --noinput
 DJANGO_SETTINGS_MODULE=core.settings_campusconnect python manage.py test apps.users.tests apps.validation.tests apps.nightpass.tests core.test_urls --noinput
 ```
 
@@ -189,9 +234,12 @@ use CSV. A migration or collectstatic run is not required for this feature.
 - `apps/users/admin.py`: Student admin route, link and permission context only.
 - `apps/users/services/student_sync.py`: parsing, validation and atomic bulk sync.
 - `apps/users/student_sync_admin.py`: upload and signed preview/confirmation.
+- `apps/users/services/student_sync_storage.py`: private, expiring server-side previews.
+- `apps/users/management/commands/cleanup_student_sync.py`: safe stale-file cleanup.
 - `apps/users/templates/admin/users/student/change_list.html`: sync link.
 - `apps/users/templates/admin/users/student/sync.html`: native admin page.
-- `apps/users/test_student_sync.py`: 32 functional and regression tests.
+- `apps/users/test_student_sync.py`: functional and regression tests, including extra columns and large previews.
+- `apps/users/test_student_sync_storage.py`: expiry, worker access, integrity, claims and cleanup tests.
 - `apps/users/test_student_sync_scale.py`: 15,000-row workload.
 - `core/settings.py`: dedicated summary logger only.
 - `docs/student-data-sync.md`: usage, samples, verification and release notes.

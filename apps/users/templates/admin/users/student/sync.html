@@ -7,11 +7,12 @@
 <p>Full sync accepts email, registration_number, name, hostel, room_number, gender, contact_number, parent_contact, year, picture.
 New students require registration_number and name. Existing registration numbers cannot change because they are primary keys.
 Absent columns are preserved; blank optional values clear fields, except pictures which are preserved by default.</p>
-<p>Hostel mode requires email,hostel,room_number. Picture mode requires email,picture. Other recognized columns are ignored in these modes.
+<p>Hostel mode requires email,hostel,room_number. Picture mode requires email,picture. Columns outside the selected mode are ignored and listed in Preview.
 Hostel names must match exactly. Unknown students in these two modes are errors. Any validation error blocks the entire file.</p>
 {% if error %}<p class="errornote">{{ error }}</p>{% endif %}
 {% if plan %}
 <h2>Preview: {{ filename }} ({{ mode }})</h2>
+{% if plan.ignored_columns %}<p class="warning">Ignored columns: {{ plan.ignored_columns|join:", " }}. These columns will not be imported. Check for misspelled field names.</p>{% endif %}
 <p>Validation duration: {{ duration }} seconds. No student or user data has been written.</p>
 <table><tbody>{% for label, count in counts %}<tr><th>{{ label }}</th><td>{{ count }}</td></tr>{% endfor %}</tbody></table>
 {% if errors %}

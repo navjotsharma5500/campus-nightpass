@@ -54,8 +54,9 @@ def _read_rows(rows):
     header = next(rows, None)
     if not header:
         raise ValidationError("File is empty.")
-    header = [str(value or "").strip().lower() for value in header]
-    if not all(header) or len(set(header)) != len(header):
+    header = [str(value or "").strip() for value in header]
+    normalized = [value.lower() for value in header]
+    if not all(header) or len(set(normalized)) != len(header):
         raise ValidationError("Headers must be nonblank and unique.")
     result = []
     for number, values in enumerate(rows, 2):
@@ -64,7 +65,7 @@ def _read_rows(rows):
             continue
         if len(values) != len(header):
             raise ValidationError(f"Row {number}: column count does not match header.")
-        result.append(dict(zip(header, values)))
+        result.append({key: value for key, value in zip(normalized, values) if key in FIELDS["full"]})
         if len(result) > MAX_ROWS:
             raise ValidationError("Maximum 20,000 data rows per upload.")
     if not result:
@@ -74,6 +75,7 @@ def _read_rows(rows):
 
 @dataclass
 class Plan:
+    ignored_columns: list = field(default_factory=list)
     counts: dict = field(default_factory=lambda: dict.fromkeys((
         "total_rows", "valid_rows", "duplicate_emails", "duplicate_registration_numbers",
         "missing_emails", "unknown_hostels", "conflicting_admin_security_emails",
@@ -93,14 +95,15 @@ def preview_sync(headers, rows, mode, clear="none", allow_blank_picture=False, l
         raise ValidationError("Clearing assignments is available only in hostel mode.")
     if mode != "picture" and allow_blank_picture:
         raise ValidationError("Blank picture clearing is available only in picture mode.")
+    original_headers = headers
+    headers = [header.strip().lower() for header in headers]
+    if not all(headers) or len(set(headers)) != len(headers):
+        raise ValidationError("Headers must be nonblank and unique.")
     required = {"email"} if mode == "full" else FIELDS[mode]
     if not required.issubset(headers):
         raise ValidationError("Missing required columns: " + ", ".join(sorted(required - set(headers))))
     if not rows or len(rows) > MAX_ROWS:
         raise ValidationError("Supply between 1 and 20,000 rows.")
-    unknown = set(headers) - FIELDS["full"]
-    if unknown:
-        raise ValidationError("Unknown columns: " + ", ".join(sorted(unknown)))
 
     users_qs = CustomUser.objects.only("id", "email", "user_type", "is_staff", "is_superuser")
     students_qs = Student.objects.all()
@@ -122,7 +125,7 @@ def preview_sync(headers, rows, mode, clear="none", allow_blank_picture=False, l
     hostels = {hostel.name: hostel.pk for hostel in Hostel.objects.all()}
     emails = Counter(normalize_email(row.get("email")) for row in rows)
     regs = Counter(row.get("registration_number", "").strip() for row in rows) if mode == "full" else Counter()
-    plan = Plan()
+    plan = Plan(ignored_columns=[name for name in original_headers if name.strip().lower() not in FIELDS[mode]])
     counts = plan.counts
     counts["total_rows"] = len(rows)
     counts["duplicate_emails"] = sum(n > 1 for email, n in emails.items() if email)

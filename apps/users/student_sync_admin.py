@@ -10,10 +10,12 @@ from django.shortcuts import redirect
 from django.template.response import TemplateResponse
 from django.urls import reverse
 
-from .services.student_sync import apply_sync, preview_sync, read_upload
+from .services.student_sync import FIELDS, apply_sync, preview_sync, read_upload
+from .services.student_sync_storage import (
+    claim_preview, create_preview, decode_token, preview_token, read_preview,
+)
 
 logger = logging.getLogger("apps.users.student_sync")
-SALT = "student-data-sync-v1"
 
 
 class SyncOptions(forms.Form):
@@ -59,9 +61,8 @@ def student_sync_view(model_admin, request):
             if request.POST.get("action") == "apply" and not token:
                 raise ValidationError("Validate and preview the file before applying it.")
             if token:
-                payload = signing.loads(token, salt=SALT, max_age=1800)
-                if payload["actor"] != request.user.pk or payload["session"] != request.session.session_key:
-                    raise PermissionDenied
+                metadata = decode_token(token, request.user.pk, request.session.session_key)
+                payload = read_preview(metadata)
                 options = SyncOptions(request.POST)
                 if not options.is_valid():
                     raise ValidationError(options.errors.as_text())
@@ -72,16 +73,17 @@ def student_sync_view(model_admin, request):
                     return TemplateResponse(request, "admin/users/student/sync.html", context)
                 upload = upload_form.cleaned_data["file"]
                 headers, rows = read_upload(upload)
-                payload = {"headers": headers, "rows": rows, "mode": upload_form.cleaned_data["mode"],
-                           "filename": upload.name, "actor": request.user.pk, "session": request.session.session_key,
-                           "options": {"clear": "none", "allow_blank_picture": False}}
+                mode = upload_form.cleaned_data["mode"]
+                rows = [{key: value for key, value in row.items() if key in FIELDS[mode]} for row in rows]
+                payload = {"headers": headers, "rows": rows, "mode": mode, "filename": upload.name}
                 options = SyncOptions({})
                 options.is_valid()
             kwargs = options.sync_kwargs()
             # Changed checkboxes must receive a fresh preview before confirmation.
-            if request.POST.get("action") == "apply" and kwargs == payload["options"]:
-                counts, duration = apply_sync(payload["headers"], payload["rows"], payload["mode"],
-                                             actor=request.user.pk, filename=payload["filename"], **kwargs)
+            if request.POST.get("action") == "apply" and kwargs == metadata["options"]:
+                with claim_preview(metadata) as payload:
+                    counts, duration = apply_sync(payload["headers"], payload["rows"], payload["mode"],
+                                                 actor=request.user.pk, filename=payload["filename"], **kwargs)
                 messages.success(request, (
                     f"Created students: {counts['students_to_create']}. Updated students: {counts['students_to_update']}. "
                     f"Created users: {counts['users_to_create']}. Reused users: {counts['users_to_reuse']}. "
@@ -91,11 +93,9 @@ def student_sync_view(model_admin, request):
                 ))
                 return redirect("admin:users_student_data_sync")
             plan = preview_sync(payload["headers"], payload["rows"], payload["mode"], **kwargs)
-            payload["options"] = kwargs
-            token = signing.dumps(payload, salt=SALT, compress=True)
-            # Keep confirmation within Django's default 2.5 MB request limit.
-            if len(token) > 1800000:
-                raise ValidationError("Confirmation data is too large; split the upload into smaller files.")
+            if not token:
+                metadata = create_preview(payload, request.user.pk, request.session.session_key)
+            token = preview_token(metadata, kwargs)
             context.update({"plan": plan, "counts": [(key.replace("_", " ").capitalize(), value) for key, value in plan.counts.items()],
                             "errors": plan.errors[:200], "error_count": len(plan.errors), "payload": token,
                             "options": options, "mode": payload["mode"], "filename": payload["filename"],
