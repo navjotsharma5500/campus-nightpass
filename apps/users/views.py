@@ -162,7 +162,7 @@ def oauth_callback(request):
                 login(request, user=user)
                 return HttpResponseRedirect(get_post_login_redirect(user))
             else:
-                messages.error(request, 'Please use Thapar ID or contact DOSA office.')
+                messages.error(request, 'Please use Thapar ID or contact hostel.support@thapar.edu')
                 return redirect('home')
         else:
             # Handle the case when the token request fails
