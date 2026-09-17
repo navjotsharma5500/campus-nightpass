@@ -4,6 +4,7 @@ from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from django.contrib.auth.forms import UserChangeForm, UserCreationForm
 from django.contrib.auth import login
 from django import forms
+from django.db import connection, transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import path, reverse
@@ -277,6 +278,61 @@ class StudentResource(resources.ModelResource):
 # STUDENT ADMIN
 # ==============================
 
+def _change_student_registration_number(student, new_registration_number):
+    old_registration_number = str(student.pk)
+    new_registration_number = str(new_registration_number or "").strip()
+
+    if (
+        not new_registration_number
+        or new_registration_number == old_registration_number
+    ):
+        return old_registration_number
+
+    if Student.objects.filter(pk=new_registration_number).exists():
+        raise ValueError(
+            f"Registration number {new_registration_number} already exists."
+        )
+
+    with transaction.atomic():
+        # Student.registration_number is the primary key. SQLite does not use
+        # ON UPDATE CASCADE for Django foreign keys, so defer FK checks while
+        # the Student PK and all direct reverse FK references move together.
+        if connection.vendor == "sqlite":
+            with connection.cursor() as cursor:
+                cursor.execute("PRAGMA defer_foreign_keys = ON")
+
+        for relation in Student._meta.related_objects:
+            if not (relation.one_to_many or relation.one_to_one):
+                continue
+
+            field = relation.field
+
+            if field.target_field != Student._meta.pk:
+                continue
+
+            relation.related_model._base_manager.filter(
+                **{field.attname: old_registration_number}
+            ).update(
+                **{field.attname: new_registration_number}
+            )
+
+        updated = Student.objects.filter(
+            pk=old_registration_number
+        ).update(
+            registration_number=new_registration_number
+        )
+
+        if updated != 1:
+            raise RuntimeError(
+                "Student registration number update did not affect exactly one row."
+            )
+
+        connection.check_constraints()
+
+    student.registration_number = new_registration_number
+    return old_registration_number
+
+
 class StudentAdmin(ImportExportModelAdmin):
     change_list_template = "admin/users/student/change_list.html"
 
@@ -293,14 +349,56 @@ class StudentAdmin(ImportExportModelAdmin):
         email = forms.EmailField(
             required=True,
             help_text=(
-                "Student login email. Changing this keeps the same user account "
-                "and existing NightPass history."
+                "This is the student's login email. Changing it changes the "
+                "email used to sign in while keeping the same account and history."
+            ),
+        )
+
+        new_registration_number = forms.CharField(
+            required=False,
+            max_length=20,
+            label="Change registration number to",
+            help_text=(
+                "Only enter a value when correcting the student's roll number. "
+                "Leave blank to keep the current registration number."
             ),
         )
 
         class Meta:
             model = Student
             exclude = ("user",)
+
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+
+            # New students already have the normal registration_number field.
+            # This correction field is only needed when editing an existing student.
+            if not self.instance or not self.instance.pk:
+                self.fields.pop("new_registration_number", None)
+
+        def clean_new_registration_number(self):
+            new_registration_number = (
+                self.cleaned_data.get("new_registration_number") or ""
+            ).strip()
+
+            if not new_registration_number:
+                return ""
+
+            if (
+                self.instance
+                and self.instance.pk
+                and new_registration_number == str(self.instance.pk)
+            ):
+                return ""
+
+            if Student.objects.filter(
+                registration_number=new_registration_number
+            ).exists():
+                raise forms.ValidationError(
+                    "A student with this registration number already exists."
+                )
+
+            return new_registration_number
 
         def clean_email(self):
             email = (self.cleaned_data.get("email") or "").strip().lower()
@@ -407,6 +505,9 @@ class StudentAdmin(ImportExportModelAdmin):
 
     def save_model(self, request, obj, form, change):
         email = form.cleaned_data["email"]
+        requested_registration_number = form.cleaned_data.get(
+            "new_registration_number"
+        )
 
         if change and obj.user_id:
             # Keep the same CustomUser/User ID and only change login email.
@@ -432,6 +533,21 @@ class StudentAdmin(ImportExportModelAdmin):
         obj.email = email
 
         super().save_model(request, obj, form, change)
+
+        if change and requested_registration_number:
+            old_registration_number = obj.registration_number
+
+            _change_student_registration_number(
+                obj,
+                requested_registration_number,
+            )
+
+            messages.success(
+                request,
+                "Registration number changed from "
+                f"{old_registration_number} to "
+                f"{obj.registration_number}.",
+            )
 
     def current_location(self, obj):
 
