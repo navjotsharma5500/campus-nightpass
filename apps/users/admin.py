@@ -290,20 +290,70 @@ class StudentAdmin(ImportExportModelAdmin):
 
     resource_class = StudentResource
     class StudentAdminForm(forms.ModelForm):
-        user = forms.ModelChoiceField(
-            queryset=CustomUser.objects.filter(user_type='student'),
-            required=False,
+        email = forms.EmailField(
+            required=True,
+            help_text=(
+                "Student login email. Changing this keeps the same user account "
+                "and existing NightPass history."
+            ),
         )
 
         class Meta:
             model = Student
-            fields = "__all__"
+            exclude = ("user",)
 
-        def clean(self):
-            cleaned_data = super().clean()
-            if not cleaned_data.get("user") and not cleaned_data.get("email"):
-                raise forms.ValidationError("Provide either a linked student user or an email address.")
-            return cleaned_data
+        def clean_email(self):
+            email = (self.cleaned_data.get("email") or "").strip().lower()
+            if not email:
+                raise forms.ValidationError("Email is required.")
+
+            current_user_id = (
+                self.instance.user_id
+                if self.instance and self.instance.pk
+                else None
+            )
+
+            if current_user_id:
+                other_user = (
+                    CustomUser.objects
+                    .filter(email__iexact=email)
+                    .exclude(pk=current_user_id)
+                    .first()
+                )
+                if other_user:
+                    linked_student = Student.objects.filter(
+                        user=other_user
+                    ).first()
+                    if linked_student:
+                        raise forms.ValidationError(
+                            "This email is already linked to student "
+                            f"{linked_student.registration_number}."
+                        )
+                    raise forms.ValidationError(
+                        "This email is already used by another account."
+                    )
+                return email
+
+            existing_user = CustomUser.objects.filter(
+                email__iexact=email
+            ).first()
+
+            if existing_user:
+                if existing_user.user_type != "student":
+                    raise forms.ValidationError(
+                        "This email belongs to a non-student account."
+                    )
+
+                linked_student = Student.objects.filter(
+                    user=existing_user
+                ).first()
+                if linked_student:
+                    raise forms.ValidationError(
+                        "This email is already linked to student "
+                        f"{linked_student.registration_number}."
+                    )
+
+            return email
 
     form = StudentAdminForm
 
@@ -321,13 +371,28 @@ class StudentAdmin(ImportExportModelAdmin):
         'impersonate_action',
     )
 
-    search_fields = ('name', 'registration_number')
+    search_fields = (
+        'name',
+        'registration_number',
+        'email',
+        'user__email',
+    )
 
-    autocomplete_fields = ('user',)
+    autocomplete_fields = ()
 
     readonly_fields = ('last_checkout_time',)
 
     list_filter = ('hostel', YearWiseFilter, 'has_booked', 'violation_flags')
+
+    def get_readonly_fields(self, request, obj=None):
+        fields = list(super().get_readonly_fields(request, obj))
+
+        # registration_number is the Student primary key. Normal ModelForm
+        # editing can create a second Student row using the same user_id.
+        if obj and "registration_number" not in fields:
+            fields.append("registration_number")
+
+        return tuple(fields)
 
     def get_urls(self):
         custom = [
@@ -340,28 +405,31 @@ class StudentAdmin(ImportExportModelAdmin):
         ]
         return custom + super().get_urls()
 
-    def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        if db_field.name == 'user':
-            kwargs['queryset'] = CustomUser.objects.filter(user_type='student')
-        return super().formfield_for_foreignkey(db_field, request, **kwargs)
-
     def save_model(self, request, obj, form, change):
-        linked_user = form.cleaned_data.get("user")
-        email = (form.cleaned_data.get("email") or "").strip()
+        email = form.cleaned_data["email"]
 
-        if linked_user is None:
-            linked_user, _ = CustomUser.objects.get_or_create(
-                email=email,
-                defaults={"user_type": "student", "is_active": True},
-            )
+        if change and obj.user_id:
+            # Keep the same CustomUser/User ID and only change login email.
+            linked_user = CustomUser.objects.get(pk=obj.user_id)
 
-        if linked_user.user_type != "student":
-            linked_user.user_type = "student"
-            linked_user.save(update_fields=["user_type", "is_staff", "is_superuser"])
+            if linked_user.email != email:
+                linked_user.email = email
+                linked_user.save(update_fields=["email"])
+        else:
+            linked_user = CustomUser.objects.filter(
+                email__iexact=email
+            ).first()
+
+            if linked_user is None:
+                linked_user = CustomUser.objects.create_user(
+                    email=email,
+                    password=None,
+                    user_type="student",
+                    is_active=True,
+                )
 
         obj.user = linked_user
-        if not obj.email:
-            obj.email = linked_user.email
+        obj.email = email
 
         super().save_model(request, obj, form, change)
 
