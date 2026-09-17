@@ -1,0 +1,7 @@
+{% extends "admin/login.html" %}
+{% load static %}
+
+{% block extrahead %}
+{{ block.super }}
+<script defer src="{% static 'nightpass/ga4-pageviews.js' %}"></script>
+{% endblock %}
