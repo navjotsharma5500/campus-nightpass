@@ -492,6 +492,17 @@ class StudentAdmin(ImportExportModelAdmin):
 
         return tuple(fields)
 
+    def get_fields(self, request, obj=None):
+        fields = list(super().get_fields(request, obj))
+
+        # new_registration_number is removed from the form for new students
+        # (StudentAdminForm.__init__), so it must also be excluded from the
+        # admin's auto-generated fieldset here, or Add Student raises KeyError.
+        if obj is None and "new_registration_number" in fields:
+            fields.remove("new_registration_number")
+
+        return fields
+
     def get_urls(self):
         custom = [
             path("data-sync/", self.admin_site.admin_view(self.student_data_sync), name="users_student_data_sync"),

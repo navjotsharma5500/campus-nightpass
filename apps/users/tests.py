@@ -330,4 +330,39 @@ class UnifiedNightPassPolicyTests(TestCase):
         self.assertEqual(NightPass.objects.filter(user=self.student_user, valid=True).count(), 0)
 
 
+class StudentAdminFieldsTests(TestCase):
+    def setUp(self):
+        self.admin_user = CustomUser.objects.create_superuser(
+            "student-admin@example.com", "pass12345"
+        )
+        self.client.force_login(self.admin_user)
+
+        self.student_user = CustomUser.objects.create_user(
+            email="admin-field-student@example.com",
+            password="pass12345",
+            user_type="student",
+        )
+        self.student = Student.objects.create(
+            user=self.student_user,
+            name="Admin Field Student",
+            registration_number="REGFIELD1",
+        )
+
+    def test_add_student_page_does_not_raise_keyerror(self):
+        response = self.client.get(client_path("admin:users_student_add"))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(
+            "new_registration_number",
+            response.context["adminform"].form.fields,
+        )
+
+    def test_change_student_page_still_has_new_registration_number(self):
+        response = self.client.get(
+            client_path("admin:users_student_change", args=[self.student.pk])
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(
+            "new_registration_number",
+            response.context["adminform"].form.fields,
+        )
 
