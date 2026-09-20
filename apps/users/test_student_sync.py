@@ -264,6 +264,30 @@ class StudentSyncAdminTests(TestCase):
         self.assertRedirects(response, prefix + "/admin/users/student/data-sync/", fetch_redirect_response=False)
         self.assertEqual(Student.objects.count(), 1)
 
+    def test_identity_dashboard_preview_and_apply(self):
+        user = CustomUser.objects.create_user("old@example.com", None)
+        Student.objects.create(user=user, registration_number="OLD", name="Original", email=user.email)
+        response = self.upload("identity", f"user,registration_number,email\n{user.pk},NEW,new@example.com\n".encode())
+        self.assertContains(response, "IDENTITY UPDATE")
+        self.assertContains(response, "Current registration")
+        self.assertContains(response, "Identity rows to update")
+        self.assertContains(response, "old@example.com")
+        self.assertContains(response, "new@example.com")
+        self.assertTrue(Student.objects.filter(pk="OLD").exists())
+        response = self.client.post(self.url, {"payload": response.context["payload"], "action": "apply"})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Student.objects.get(user=user).pk, "NEW")
+        user.refresh_from_db()
+        self.assertEqual(user.email, "new@example.com")
+
+    def test_identity_requires_superuser_even_with_sync_permissions(self):
+        staff = CustomUser.objects.create_user("staff@example.com", None, is_staff=True)
+        staff.user_permissions.add(*Permission.objects.filter(codename__in=("change_student", "add_student", "add_customuser")))
+        self.client.force_login(staff)
+        response = self.upload("identity", b"user,registration_number,email\n1,NEW,new@example.com\n")
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(self.upload().status_code, 200)
+
     def test_changelist_preserves_import_export_and_sync_link(self):
         response = self.client.get(reverse("admin:users_student_changelist").removeprefix(settings.FORCE_SCRIPT_NAME or ""))
         self.assertContains(response, "Student Data Sync")

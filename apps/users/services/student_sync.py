@@ -1,4 +1,4 @@
-"""Student administration only. Never save/delete students or touch pass state."""
+"""Student administration only. Never delete students or touch pass state."""
 import csv
 import io
 import logging
@@ -23,6 +23,7 @@ FIELDS = {
              "gender", "contact_number", "parent_contact", "year", "picture"},
     "hostel": {"email", "hostel", "room_number"},
     "picture": {"email", "picture"},
+    "identity": {"user", "registration_number", "email"},
 }
 
 
@@ -41,19 +42,19 @@ def normalize_headers(headers):
     return ["picture" if name in PICTURE_HEADERS else name for name in normalized]
 
 
-def read_upload(upload):
+def read_upload(upload, mode="full"):
     if upload.size > MAX_BYTES:
         raise ValidationError("File exceeds 10 MB.")
     suffix = upload.name.rsplit(".", 1)[-1].lower()
     try:
         if suffix == "csv":
             rows = csv.reader(io.StringIO(upload.read().decode("utf-8-sig")), strict=True)
-            return _read_rows(rows)
+            return _read_rows(rows, mode)
         if suffix == "xlsx":
             from openpyxl import load_workbook
             workbook = load_workbook(upload, read_only=True, data_only=False)
             try:
-                return _read_rows(workbook.active.values)
+                return _read_rows(workbook.active.values, mode)
             finally:
                 workbook.close()
         raise ValidationError("Upload a UTF-8 CSV or XLSX file.")
@@ -61,7 +62,7 @@ def read_upload(upload):
         raise ValidationError("Unable to read file. Use UTF-8 CSV (XLSX requires openpyxl).") from exc
 
 
-def _read_rows(rows):
+def _read_rows(rows, mode="full"):
     rows = iter(rows)
     header = next(rows, None)
     if not header:
@@ -75,7 +76,7 @@ def _read_rows(rows):
             values = [""] * len(header)
         if len(values) != len(header):
             raise ValidationError(f"Row {number}: column count does not match header.")
-        result.append({key: value for key, value in zip(normalized, values) if key in FIELDS["full"]})
+        result.append({key: value for key, value in zip(normalized, values) if key in FIELDS["full"] | ({"user"} if mode == "identity" else set())})
         if len(result) > MAX_ROWS:
             raise ValidationError("Maximum 20,000 data rows per upload.")
     if not result:
@@ -98,6 +99,7 @@ class Plan:
     ), 0))
     errors: list = field(default_factory=list)
     entries: list = field(default_factory=list)
+    identity_rows: list = field(default_factory=list)
     student_ids: set = field(default_factory=set)
 
 
@@ -115,6 +117,9 @@ def preview_sync(headers, rows, mode, clear="none", allow_blank_picture=False, l
         raise ValidationError("Missing required columns: " + ", ".join(sorted(required - set(headers))))
     if not rows or len(rows) > MAX_ROWS:
         raise ValidationError("Supply between 1 and 20,000 rows.")
+
+    if mode == "identity":
+        return _preview_identity(original_headers, headers, rows, lock=lock)
 
     users_qs = CustomUser.objects.only("id", "email", "user_type", "is_staff", "is_superuser")
     students_qs = Student.objects.all()
@@ -293,42 +298,53 @@ def apply_sync(headers, rows, mode, *, actor, filename, clear="none", allow_blan
             if connection.vendor == "postgresql":
                 with connection.cursor() as cursor:
                     cursor.execute("SELECT pg_advisory_xact_lock(1937012083)")
+            if mode == "identity" and connection.vendor == "postgresql":
+                # Row locks cannot protect an absent email, and the existing
+                # unique email constraint is case-sensitive. Block concurrent
+                # identity/protection inserts and writes until commit as well.
+                tables = sorted(connection.ops.quote_name(model._meta.db_table)
+                                for model in (CustomUser, Student, Admin, Security))
+                with connection.cursor() as cursor:
+                    cursor.execute("LOCK TABLE " + ", ".join(tables) + " IN SHARE ROW EXCLUSIVE MODE")
             plan = preview_sync(headers, rows, mode, clear, allow_blank_picture, lock=True)
             if plan.errors:
                 raise ValidationError(plan.errors)
-            if clear != "none":
-                queryset = Student.objects.all()
-                if clear == "absent":
-                    # Email matching above resolves the stable primary keys first.
-                    queryset = queryset.exclude(pk__in=plan.student_ids)
-                queryset.update(hostel=None, room_number=None)
-            new_users = []
-            for student, user, email, values in plan.entries:
-                if not student and not user:
-                    user = CustomUser(email=email, user_type="student")
-                    user.set_unusable_password()
-                    new_users.append(user)
-            CustomUser.objects.bulk_create(new_users, batch_size=BATCH_SIZE)
-            # Reload IDs for database backends without bulk INSERT RETURNING.
-            new_by_email = {}
-            for start in range(0, len(new_users), BATCH_SIZE):
-                emails = [u.email for u in new_users[start:start + BATCH_SIZE]]
-                new_by_email.update((u.email, u) for u in CustomUser.objects.filter(email__in=emails))
-            creates = []
-            updates = defaultdict(list)
-            for student, user, email, values in plan.entries:
-                if student:
-                    if values:
-                        for key, value in values.items():
-                            setattr(student, key, value)
-                        updates[tuple(sorted(values))].append(student)
-                else:
-                    creates.append(Student(user=user or new_by_email[email], **values))
-            Student.objects.bulk_create(creates, batch_size=BATCH_SIZE)
-            for fields, objects in updates.items():
-                # Bound CASE expression memory as well as SQL batch size.
-                for start in range(0, len(objects), BATCH_SIZE):
-                    Student.objects.bulk_update(objects[start:start + BATCH_SIZE], fields, batch_size=BATCH_SIZE)
+            if mode == "identity":
+                _apply_identity(plan)
+            else:
+                if clear != "none":
+                    queryset = Student.objects.all()
+                    if clear == "absent":
+                        # Email matching above resolves the stable primary keys first.
+                        queryset = queryset.exclude(pk__in=plan.student_ids)
+                    queryset.update(hostel=None, room_number=None)
+                new_users = []
+                for student, user, email, values in plan.entries:
+                    if not student and not user:
+                        user = CustomUser(email=email, user_type="student")
+                        user.set_unusable_password()
+                        new_users.append(user)
+                CustomUser.objects.bulk_create(new_users, batch_size=BATCH_SIZE)
+                # Reload IDs for database backends without bulk INSERT RETURNING.
+                new_by_email = {}
+                for start in range(0, len(new_users), BATCH_SIZE):
+                    emails = [u.email for u in new_users[start:start + BATCH_SIZE]]
+                    new_by_email.update((u.email, u) for u in CustomUser.objects.filter(email__in=emails))
+                creates = []
+                updates = defaultdict(list)
+                for student, user, email, values in plan.entries:
+                    if student:
+                        if values:
+                            for key, value in values.items():
+                                setattr(student, key, value)
+                            updates[tuple(sorted(values))].append(student)
+                    else:
+                        creates.append(Student(user=user or new_by_email[email], **values))
+                Student.objects.bulk_create(creates, batch_size=BATCH_SIZE)
+                for fields, objects in updates.items():
+                    # Bound CASE expression memory as well as SQL batch size.
+                    for start in range(0, len(objects), BATCH_SIZE):
+                        Student.objects.bulk_update(objects[start:start + BATCH_SIZE], fields, batch_size=BATCH_SIZE)
         counts = plan.counts
         duration = perf_counter() - started
         logger.info("Student sync admin=%s mode=%s filename=%r total=%s created=%s updated=%s users_created=%s users_reused=%s skipped=%s failed=0 timestamp=%s duration=%.3fs",
@@ -339,3 +355,112 @@ def apply_sync(headers, rows, mode, *, actor, filename, clear="none", allow_blan
         logger.warning("Student sync rolled back admin=%s mode=%s filename=%r total=%s created=0 updated=0 failed=%s timestamp=%s duration=%.3fs",
                        actor, mode, filename, len(rows), len(rows), timezone.now().isoformat(), perf_counter() - started)
         raise
+
+
+def _preview_identity(original_headers, headers, rows, *, lock=False):
+    # Lock in a consistent order, including possible existing target owners.
+    users_qs = CustomUser.objects.order_by("pk")
+    students_qs = Student.objects.order_by("pk")
+    admins = Admin.objects.order_by("pk")
+    security = Security.objects.order_by("pk")
+    if lock:
+        users_qs = users_qs.select_for_update()
+        students_qs = students_qs.select_for_update()
+        admins = admins.select_for_update()
+        security = security.select_for_update()
+    users = {u.pk: u for u in users_qs}
+    students = list(students_qs)
+    protected = {a.user_id for a in admins} | {s.user_id for s in security}
+    profiles = defaultdict(list)
+    emails = defaultdict(set)
+    rolls = {s.pk: s for s in students}
+    for student in students:
+        profiles[student.user_id].append(student)
+    for user in users.values():
+        emails[normalize_email(user.email)].add(user.pk)
+    normalized = []
+    for row in rows:
+        raw_user = str(row.get("user", "")).strip()
+        digits = raw_user.lstrip("0") or "0"
+        user_id = int(digits) if digits.isascii() and digits.isdecimal() and len(digits) <= 19 else None
+        normalized.append((user_id, str(row.get("registration_number", "")).strip(),
+                           normalize_email(row.get("email"))))
+    user_counts = Counter(item[0] for item in normalized)
+    roll_counts = Counter(item[1] for item in normalized)
+    email_counts = Counter(item[2] for item in normalized)
+    plan = Plan(ignored_columns=[source for source, name in zip(original_headers, headers)
+                                if name not in FIELDS["identity"]])
+    counts = plan.counts
+    counts.update(total_rows=len(rows), rows_considered=len(rows), identity_rows_to_update=0,
+                  identity_rows_unchanged=0, identity_error_rows=0,
+                  duplicate_users=sum(n > 1 for key, n in user_counts.items() if key is not None))
+    counts["duplicate_registration_numbers"] = sum(n > 1 for key, n in roll_counts.items() if key)
+    counts["duplicate_emails"] = sum(n > 1 for key, n in email_counts.items() if key)
+    for number, (user_id, reg, email) in enumerate(normalized, 2):
+        errors = []
+        user = users.get(user_id)
+        matches = profiles.get(user_id, [])
+        student = matches[0] if len(matches) == 1 else None
+        if not user:
+            errors.append("user must be an existing CustomUser.id")
+        else:
+            if user.user_type != "student" or user.is_staff or user.is_superuser or user_id in protected:
+                errors.append("protected admin/security/non-student user")
+                counts["conflicting_admin_security_emails"] += 1
+            if not student:
+                errors.append("user must have exactly one Student profile")
+        for field_name, value, model in (("registration_number", reg, Student), ("email", email, CustomUser)):
+            try:
+                model._meta.get_field(field_name).clean(value, None)
+            except ValidationError as exc:
+                errors.append(f"{field_name}: {'; '.join(exc.messages)}")
+        if not email:
+            counts["missing_emails"] += 1
+        if user_id is not None and user_counts[user_id] > 1:
+            errors.append(f"duplicate user: {user_id}")
+        if reg and roll_counts[reg] > 1:
+            errors.append(f"duplicate target registration number: {reg}")
+        if email and email_counts[email] > 1:
+            errors.append(f"duplicate target email: {email}")
+        if reg in rolls and (not student or rolls[reg].pk != student.pk):
+            errors.append(f"registration number already belongs to another student: {reg}")
+        if emails[email] - {user_id}:
+            errors.append(f"email already belongs to another CustomUser: {email}")
+        changed = bool(student and user and (student.pk != reg or student.email != email or user.email != email))
+        plan.identity_rows.append(dict(row=number, user=user_id, current_registration_number=student.pk if student else "",
+                                       registration_number=reg, current_email=user.email if user else "",
+                                       current_student_email=student.email if student else "", email=email,
+                                       status="Error" if errors else "Update" if changed else "Unchanged"))
+        if errors:
+            counts["error_rows"] += 1
+            plan.errors.extend(f"Row {number}: {message}" for message in errors)
+            continue
+        counts["valid_rows"] += 1
+        counts["students_to_update"] += changed
+        counts["unchanged_rows"] += not changed
+        plan.entries.append((student, user, reg, email, changed))
+    counts["identity_rows_to_update"] = counts["students_to_update"]
+    counts["identity_rows_unchanged"] = counts["unchanged_rows"]
+    counts["identity_error_rows"] = counts["error_rows"]
+    counts["skipped_rows"] = counts["error_rows"] + counts["unchanged_rows"]
+    return plan
+
+
+def _apply_identity(plan):
+    from .student_identity import change_student_registration_number
+
+    for student, user, reg, email, changed in plan.entries:
+        if not changed:
+            continue
+        if student.pk != reg:
+            # check_constraints makes PostgreSQL constraints immediate; defer
+            # again for each correction within this upload's outer transaction.
+            if connection.vendor == "postgresql":
+                with connection.cursor() as cursor:
+                    cursor.execute("SET CONSTRAINTS ALL DEFERRED")
+            change_student_registration_number(student, reg)
+        if CustomUser.objects.filter(pk=user.pk).update(email=email) != 1:
+            raise ValidationError("Identity update lost its CustomUser.")
+        if Student.objects.filter(pk=reg, user_id=user.pk).update(email=email) != 1:
+            raise ValidationError("Identity update lost its Student profile.")
+    connection.check_constraints()

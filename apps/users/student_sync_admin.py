@@ -42,7 +42,7 @@ class SyncOptions(forms.Form):
 
 class SyncUpload(forms.Form):
     file = forms.FileField(label="Student data file (CSV or XLSX)")
-    mode = forms.ChoiceField(choices=(("full", "FULL STUDENT SYNC"), ("hostel", "HOSTEL / ROOM SYNC"), ("picture", "PICTURE URL SYNC")))
+    mode = forms.ChoiceField(choices=(("full", "FULL STUDENT SYNC"), ("hostel", "HOSTEL / ROOM SYNC"), ("picture", "PICTURE URL SYNC"), ("identity", "IDENTITY UPDATE")))
 
 
 def can_sync(model_admin, request):
@@ -78,11 +78,13 @@ def student_sync_view(model_admin, request):
                 if not upload_form.is_valid():
                     return TemplateResponse(request, "admin/users/student/sync.html", context)
                 upload = upload_form.cleaned_data["file"]
-                headers, rows = read_upload(upload)
                 mode = upload_form.cleaned_data["mode"]
+                headers, rows = read_upload(upload, mode=mode)
                 payload = {"headers": headers, "rows": rows, "mode": mode, "filename": upload.name}
                 options = SyncOptions({})
                 options.is_valid()
+            if payload["mode"] == "identity" and not request.user.is_superuser:
+                raise PermissionDenied
             kwargs = options.sync_kwargs()
             # Changed checkboxes must receive a fresh preview before confirmation.
             if request.POST.get("action") == "apply" and kwargs == metadata["options"]:

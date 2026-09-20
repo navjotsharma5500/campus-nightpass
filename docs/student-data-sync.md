@@ -14,7 +14,7 @@ Requires staff admin access, `users.change_student`, `users.add_student`, and
 Upload a UTF-8 CSV (BOM accepted) or XLSX, select a mode, and validate. Preview
 performs database reads only, reports counts and row errors, and blocks apply if
 any row fails. Up to 200 error messages are displayed; correct the file and repeat
-validation for the rest. Blank physical rows count as skipped footer rows. Limits: 20,000 physical data rows,
+validation for the rest. In FULL, HOSTEL/ROOM and PICTURE modes, blank physical rows count as skipped footer rows; IDENTITY UPDATE rejects them. Limits: 20,000 physical data rows,
 10 MB input. Parsed rows stay server-side; confirmation uses a small token regardless
 of dataset size.
 
@@ -282,3 +282,26 @@ use CSV. A migration or collectstatic run is not required for this feature.
 - `apps/users/test_student_sync_scale.py`: 15,000-row workload.
 - `core/settings.py`: dedicated summary logger only.
 - `docs/student-data-sync.md`: usage, samples, verification and release notes.
+
+
+## IDENTITY UPDATE
+
+Superusers can correct existing identities using `user,registration_number,email`.
+`user` is the stable CustomUser ID, never a registration number. Both target
+fields are required and nonblank. Emails are trimmed and lowercased; registration
+numbers are trimmed and remain case-sensitive. Unchanged rows are accepted.
+Preview shows both current email fields, current/requested registration numbers,
+requested email, row status, and update/unchanged/error counts without writing data.
+
+Duplicate user IDs, duplicate target registration numbers, case-insensitive
+email duplicates, existing owners, missing profiles, and protected accounts block
+the entire upload. Swapping identities between existing students is rejected.
+Apply revalidates under locks and commits all rows in one transaction. Registration
+corrections use the same service as individual StudentAdmin corrections, preserving
+CustomUser IDs, student data and foreign-key history. Both email fields update
+together. No users or students are created or deleted.
+
+PostgreSQL identity uploads lock the user, student, admin and security
+tables against concurrent writes because the existing email uniqueness constraint
+is case-sensitive. Reads remain available. SQLite serializes writes; a concurrent
+write conflict fails safely and requires a fresh preview/retry. No migration is needed.

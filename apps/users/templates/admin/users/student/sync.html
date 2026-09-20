@@ -3,13 +3,14 @@
 <div class="breadcrumbs"><a href="{% url 'admin:index' %}">Home</a> &rsaquo; <a href="{{ list_url }}">Students</a> &rsaquo; Student Data Sync</div>
 {% endblock %}
 {% block content %}
-<p>Match by trimmed, case-insensitive email. CSV must use UTF-8. XLSX identifiers should be stored as text to preserve leading zeros.</p>
+<p>Full, hostel and picture modes match by trimmed, case-insensitive email. CSV must use UTF-8. XLSX identifiers should be stored as text to preserve leading zeros.</p>
 <p>Full sync accepts email, registration_number, name, hostel, room_number, gender, contact_number, parent_contact, year, picture.
-New students require registration_number and name. Existing registration numbers cannot change because they are primary keys.
+New students require registration_number and name. FULL sync cannot change existing registration numbers.
 Absent columns are preserved; blank optional values clear fields, except pictures which are preserved by default.</p>
 <p>Hostel mode requires email,hostel,room_number. Picture mode requires email,picture. Columns outside the selected mode are ignored and listed in Preview.
 Hostel names must match exactly. Unknown students in these two modes are errors. Any validation error blocks the entire file.</p>
 <p>Picture headers accepted (case-insensitive): picture, URL, picture_url, image_url. Supply only one picture column.</p>
+<p>IDENTITY UPDATE (superusers only) requires user,registration_number,email. user is the existing CustomUser ID. Both identity fields must be nonblank. This mode corrects existing students in place and preserves history; it never creates students or users.</p>
 {% if error %}<p class="errornote">{{ error }}</p>{% endif %}
 {% if plan %}
 <h2>Preview: {{ filename }} ({{ mode }})</h2>
@@ -17,6 +18,10 @@ Hostel names must match exactly. Unknown students in these two modes are errors.
 {% if plan.ignored_columns %}<p class="warning">Ignored columns: {{ plan.ignored_columns|join:", " }}. These columns will not be imported. Check for misspelled field names.</p>{% endif %}
 <p>Validation duration: {{ duration }} seconds. No student or user data has been written.</p>
 <table><tbody>{% for label, count in counts %}<tr><th>{{ label }}</th><td>{{ count }}</td></tr>{% endfor %}</tbody></table>
+{% if mode == 'identity' %}
+<table><thead><tr><th>Row</th><th>User ID</th><th>Current registration</th><th>Requested registration</th><th>Current user email</th><th>Current student email</th><th>Requested email</th><th>Status</th></tr></thead>
+<tbody>{% for row in plan.identity_rows %}<tr><td>{{ row.row }}</td><td>{{ row.user }}</td><td>{{ row.current_registration_number }}</td><td>{{ row.registration_number }}</td><td>{{ row.current_email }}</td><td>{{ row.current_student_email }}</td><td>{{ row.email }}</td><td>{{ row.status }}</td></tr>{% endfor %}</tbody></table>
+{% endif %}
 {% if errors %}
 <p class="errornote">{{ error_count }} validation errors. Showing up to 200. Correct the file and upload again. Nothing can be applied.</p>
 <ul>{% for error in errors %}<li>{{ error }}</li>{% endfor %}</ul>

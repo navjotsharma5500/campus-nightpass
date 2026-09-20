@@ -4,7 +4,6 @@ from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from django.contrib.auth.forms import UserChangeForm, UserCreationForm
 from django.contrib.auth import login
 from django import forms
-from django.db import connection, transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import path, reverse
@@ -24,6 +23,7 @@ from import_export.widgets import ForeignKeyWidget
 from apps.nightpass.models import Hostel
 
 from .models import Student, NightPass, Security, Admin, CustomUser
+from .services.student_identity import change_student_registration_number
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
@@ -278,59 +278,6 @@ class StudentResource(resources.ModelResource):
 # STUDENT ADMIN
 # ==============================
 
-def _change_student_registration_number(student, new_registration_number):
-    old_registration_number = str(student.pk)
-    new_registration_number = str(new_registration_number or "").strip()
-
-    if (
-        not new_registration_number
-        or new_registration_number == old_registration_number
-    ):
-        return old_registration_number
-
-    if Student.objects.filter(pk=new_registration_number).exists():
-        raise ValueError(
-            f"Registration number {new_registration_number} already exists."
-        )
-
-    with transaction.atomic():
-        # Student.registration_number is the primary key. SQLite does not use
-        # ON UPDATE CASCADE for Django foreign keys, so defer FK checks while
-        # the Student PK and all direct reverse FK references move together.
-        if connection.vendor == "sqlite":
-            with connection.cursor() as cursor:
-                cursor.execute("PRAGMA defer_foreign_keys = ON")
-
-        for relation in Student._meta.related_objects:
-            if not (relation.one_to_many or relation.one_to_one):
-                continue
-
-            field = relation.field
-
-            if field.target_field != Student._meta.pk:
-                continue
-
-            relation.related_model._base_manager.filter(
-                **{field.attname: old_registration_number}
-            ).update(
-                **{field.attname: new_registration_number}
-            )
-
-        updated = Student.objects.filter(
-            pk=old_registration_number
-        ).update(
-            registration_number=new_registration_number
-        )
-
-        if updated != 1:
-            raise RuntimeError(
-                "Student registration number update did not affect exactly one row."
-            )
-
-        connection.check_constraints()
-
-    student.registration_number = new_registration_number
-    return old_registration_number
 
 
 class StudentAdmin(ImportExportModelAdmin):
@@ -548,7 +495,7 @@ class StudentAdmin(ImportExportModelAdmin):
         if change and requested_registration_number:
             old_registration_number = obj.registration_number
 
-            _change_student_registration_number(
+            change_student_registration_number(
                 obj,
                 requested_registration_number,
             )
