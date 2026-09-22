@@ -2,7 +2,7 @@
 {% load static %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{% static 'nightpass/admin_dashboard.css' %}?v=20260311b">
+<link rel="stylesheet" href="{% static 'nightpass/admin_dashboard.css' %}?v=20260923a">
 
 {% endblock %}
 {% block content %}
@@ -11,15 +11,16 @@
 <div class="dashboard-container">
 
     <div class="summary-header">
-        <h2>
-            CAMPUS LIBRARY NIGHT PASS
-            <span>({{ selected_date_display }})</span>
-        </h2>
+        <div class="summary-heading">
+            <p class="eyebrow">Campus Library Night Pass</p>
+            <h2>Operations Dashboard</h2>
+            <p class="selected-date">Showing data for <strong>{{ selected_date_display }}</strong></p>
+        </div>
         <div class="header-actions">
             <form method="get" class="date-range-form">
                 <div class="date-group">
-                    <label>Date</label>
-                    <input type="date" name="date" value="{{ selected_date }}" required>
+                    <label for="dashboard-date">Date</label>
+                    <input id="dashboard-date" type="date" name="date" value="{{ selected_date }}" required>
                 </div>
                 <input type="hidden" name="activity" value="{{ activity_tab }}">
                 {% if search_term %}<input type="hidden" name="q" value="{{ search_term }}">{% endif %}
@@ -27,13 +28,13 @@
                 <button type="submit" class="secondary-btn">Apply</button>
             </form>
             {% if can_manage_admin %}
-            <a href="{% url 'analytics' %}?from_date={{ selected_date }}&to_date={{ selected_date }}" class="secondary-btn">
+            <a href="{% url 'analytics' %}?from_date={{ selected_date }}&to_date={{ selected_date }}" class="secondary-btn secondary-btn--outline">
                 View Analytics
             </a>
             {% endif %}
-            <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#4b5563;">
+            <label class="auto-refresh-toggle">
                 <input id="auto-refresh-toggle" type="checkbox">
-                Auto refresh 20s
+                <span>Auto refresh 20s</span>
             </label>
         </div>
     </div>
@@ -41,40 +42,58 @@
 
     <div class="summary-cards">
 
-        <a href="{% if can_manage_admin %}{% url 'dashboard_detail' 'active-checkins' %}?date={{ selected_date }}{% else %}javascript:void(0){% endif %}" class="card">
-            <div class="card-title">🟢 Active Check-ins</div>
-            <div class="card-value">{{ active_checkins }}</div>
-            <div class="card-sub">Currently in library</div>
+        <a href="{% if can_manage_admin %}{% url 'dashboard_detail' 'active-checkins' %}?date={{ selected_date }}{% else %}javascript:void(0){% endif %}" class="card card--green">
+            <span class="card-icon" aria-hidden="true">&#10003;</span>
+            <div class="card-body">
+                <div class="card-title">Active Check-ins</div>
+                <div class="card-value">{{ active_checkins }}</div>
+                <div class="card-sub">Currently in library</div>
+            </div>
         </a>
 
-        <a href="{% if can_manage_admin %}{% url 'dashboard_detail' 'active-passes' %}?date={{ selected_date }}{% else %}javascript:void(0){% endif %}" class="card">
-            <div class="card-title">📌 Active Passes</div>
-            <div class="card-value">{{ active_passes }}</div>
-            <div class="card-sub">Open journeys</div>
+        <a href="{% if can_manage_admin %}{% url 'dashboard_detail' 'active-passes' %}?date={{ selected_date }}{% else %}javascript:void(0){% endif %}" class="card card--slate">
+            <span class="card-icon" aria-hidden="true">&#9642;</span>
+            <div class="card-body">
+                <div class="card-title">Active Passes</div>
+                <div class="card-value">{{ active_passes }}</div>
+                <div class="card-sub">Open journeys</div>
+            </div>
         </a>
 
-        <a href="{% if can_manage_admin %}{% url 'dashboard_detail' 'voilation' %}?date={{ selected_date }}{% else %}javascript:void(0){% endif %}" class="card danger-card">
-            <div class="card-title">🔴 Students Violation</div>
-            <div class="card-value">{{ violation_count }}</div>
-            <div class="card-sub">Violations today</div>
+        <a href="{% if can_manage_admin %}{% url 'dashboard_detail' 'voilation' %}?date={{ selected_date }}{% else %}javascript:void(0){% endif %}" class="card card--red">
+            <span class="card-icon" aria-hidden="true">&#33;</span>
+            <div class="card-body">
+                <div class="card-title">Students Violation</div>
+                <div class="card-value">{{ violation_count }}</div>
+                <div class="card-sub">Violations today</div>
+            </div>
         </a>
 
-        <a href="{% if can_manage_admin %}{% url 'dashboard_detail' 'in-transit' %}?date={{ selected_date }}{% else %}javascript:void(0){% endif %}" class="card">
-            <div class="card-title">🚌 In Transit</div>
-            <div class="card-value">{{ in_transit }}</div>
-            <div class="card-sub">Between scan points</div>
+        <a href="{% if can_manage_admin %}{% url 'dashboard_detail' 'in-transit' %}?date={{ selected_date }}{% else %}javascript:void(0){% endif %}" class="card card--amber">
+            <span class="card-icon" aria-hidden="true">&#8594;</span>
+            <div class="card-body">
+                <div class="card-title">In Transit</div>
+                <div class="card-value">{{ in_transit }}</div>
+                <div class="card-sub">Between scan points</div>
+            </div>
         </a>
 
-        <a href="{% if can_manage_admin %}{% url 'dashboard_detail' 'completed-today' %}?date={{ selected_date }}{% else %}javascript:void(0){% endif %}" class="card">
-            <div class="card-title">✅ Completed Today</div>
-            <div class="card-value">{{ completed_today }}</div>
-            <div class="card-sub">Closed passes</div>
+        <a href="{% if can_manage_admin %}{% url 'dashboard_detail' 'completed-today' %}?date={{ selected_date }}{% else %}javascript:void(0){% endif %}" class="card card--green">
+            <span class="card-icon" aria-hidden="true">&#10003;</span>
+            <div class="card-body">
+                <div class="card-title">Completed Today</div>
+                <div class="card-value">{{ completed_today }}</div>
+                <div class="card-sub">Closed passes</div>
+            </div>
         </a>
 
-        <a href="{% if can_manage_admin %}{% url 'dashboard_detail' 'blocked-students' %}?date={{ selected_date }}{% else %}javascript:void(0){% endif %}" class="card danger-card">
-            <div class="card-title">⛔ Blocked Students</div>
-            <div class="card-value">{{ blocked_students }}</div>
-            <div class="card-sub">Reached max violations</div>
+        <a href="{% if can_manage_admin %}{% url 'dashboard_detail' 'blocked-students' %}?date={{ selected_date }}{% else %}javascript:void(0){% endif %}" class="card card--red">
+            <span class="card-icon" aria-hidden="true">&#8856;</span>
+            <div class="card-body">
+                <div class="card-title">Blocked Students</div>
+                <div class="card-value">{{ blocked_students }}</div>
+                <div class="card-sub">Reached max violations</div>
+            </div>
         </a>
 
     </div>
@@ -82,13 +101,15 @@
 
     <div class="activity-section">
 
-        <h3>RECENT ACTIVITY</h3>
+        <div class="activity-heading">
+            <h3>Recent Activity</h3>
+        </div>
         <div class="filters in-activity">
-          <a class="filter {% if activity_tab == 'all' %}active{% endif %}" href="?date={{ selected_date }}&activity=all">✔ All</a>
-          <a class="filter {% if activity_tab == 'in_transit' %}active{% endif %}" href="?date={{ selected_date }}&activity=in_transit">🚌 In Transit</a>
-          <a class="filter {% if activity_tab == 'in_library' %}active{% endif %}" href="?date={{ selected_date }}&activity=in_library">📚 In Library</a>
-          <a class="filter {% if activity_tab == 'complete' %}active{% endif %}" href="?date={{ selected_date }}&activity=complete">✅ Complete</a>
-          <a class="filter danger {% if activity_tab == 'defaulters' %}active{% endif %}" href="?date={{ selected_date }}&activity=defaulters">🔴 Defaulters</a>
+          <a class="filter {% if activity_tab == 'all' %}active{% endif %}" href="?date={{ selected_date }}&activity=all">All</a>
+          <a class="filter {% if activity_tab == 'in_transit' %}active{% endif %}" href="?date={{ selected_date }}&activity=in_transit">In Transit</a>
+          <a class="filter {% if activity_tab == 'in_library' %}active{% endif %}" href="?date={{ selected_date }}&activity=in_library">In Library</a>
+          <a class="filter {% if activity_tab == 'complete' %}active{% endif %}" href="?date={{ selected_date }}&activity=complete">Complete</a>
+          <a class="filter danger {% if activity_tab == 'defaulters' %}active{% endif %}" href="?date={{ selected_date }}&activity=defaulters">Defaulters</a>
         </div>
 
         <div class="toolbar">
@@ -98,9 +119,10 @@
                 <input type="text" name="q" value="{{ search_term }}" placeholder="Search by roll no, student name, or email">
                 <button type="submit" class="secondary-btn">Search Student</button>
             </form>
-            {% if can_manage_admin %}<a class="secondary-btn" href="{% url 'download_admin_table_excel' %}?scope=activity&date={{ selected_date }}&activity={{ activity_tab }}">Download This Table</a>{% endif %}
+            {% if can_manage_admin %}<a class="secondary-btn secondary-btn--outline" href="{% url 'download_admin_table_excel' %}?scope=activity&date={{ selected_date }}&activity={{ activity_tab }}">Download This Table</a>{% endif %}
         </div>
 
+        <div class="table-scroll">
         <table>
             <thead>
                 <tr>
@@ -119,24 +141,30 @@
             <tbody>
 {% for checkin in recent_checkins %}
 <tr>
-    <td>{{ checkin.user.student.name }} <small>{{ checkin.user.student.get_student_type_display }}</small></td>
+    <td>
+        <div class="student-cell">
+            <span class="student-name">{{ checkin.user.student.name }}</span>
+            <span class="type-badge type-badge--{{ checkin.user.student.student_type|lower }}">{{ checkin.user.student.get_student_type_display }}</span>
+        </div>
+    </td>
     <td>{{ checkin.user.student.hostel_display }}</td>
-    <td>{{ checkin.start_time|time:"H:i:s" }}</td>
-    <td>{{ checkin.hostel_checkout_time|date:"d M Y H:i:s"|default:"-" }}</td>
-    <td>{{ checkin.library_in_time|date:"d M Y H:i:s"|default:"-" }}</td>
-    <td>{{ checkin.library_out_time|date:"d M Y H:i:s"|default:"-" }}</td>
-    <td>{{ checkin.hostel_checkin_time|date:"d M Y H:i:s"|default:"-" }}</td>
-    <td>{{ checkin.violation_time|date:"d M Y H:i:s"|default:"-" }}</td>
+    <td class="cell-time">{{ checkin.start_time|time:"H:i:s" }}</td>
+    <td class="cell-time">{{ checkin.hostel_checkout_time|date:"d M Y H:i:s"|default:"-" }}</td>
+    <td class="cell-time">{{ checkin.library_in_time|date:"d M Y H:i:s"|default:"-" }}</td>
+    <td class="cell-time">{{ checkin.library_out_time|date:"d M Y H:i:s"|default:"-" }}</td>
+    <td class="cell-time">{{ checkin.hostel_checkin_time|date:"d M Y H:i:s"|default:"-" }}</td>
+    <td class="cell-time">{{ checkin.violation_time|date:"d M Y H:i:s"|default:"-" }}</td>
     <td>{{ checkin.violation_codes_display }}</td>
-    <td class="status">● {{ checkin.dashboard_status }}</td>
+    <td><span class="status-badge status-badge--{{ checkin.dashboard_status|slugify }}">{{ checkin.dashboard_status }}</span></td>
 </tr>
 {% empty %}
-<tr>
+<tr class="empty-row">
     <td colspan="10">No recent activity for selected tab</td>
 </tr>
 {% endfor %}
             </tbody>
         </table>
+        </div>
         <div class="pagination-row">
             {% if page_obj.has_previous %}
                 <a class="page-link" href="?date={{ selected_date }}&activity={{ activity_tab }}&page={{ page_obj.previous_page_number }}">Prev</a>
@@ -149,9 +177,10 @@
 
         {% if search_term %}
         <div class="top-head">
-            <h3>SEARCH RESULTS</h3>
-            {% if can_manage_admin %}<a class="secondary-btn" href="{% url 'download_admin_table_excel' %}?scope=student_search&q={{ search_term }}">Download Results</a>{% endif %}
+            <h3>Search Results</h3>
+            {% if can_manage_admin %}<a class="secondary-btn secondary-btn--outline" href="{% url 'download_admin_table_excel' %}?scope=student_search&q={{ search_term }}">Download Results</a>{% endif %}
         </div>
+        <div class="table-scroll">
         <table>
             <thead>
                 <tr>
@@ -171,20 +200,22 @@
                     <td>{{ student.user.email }}</td>
                     <td>{{ student.hostel_display }}</td>
                     <td>{{ student.violation_flags }}</td>
-                    <td><a href="?date={{ selected_date }}&activity={{ activity_tab }}&q={{ search_term }}&student={{ student.registration_number }}">View Timeline</a></td>
+                    <td><a class="timeline-link" href="?date={{ selected_date }}&activity={{ activity_tab }}&q={{ search_term }}&student={{ student.registration_number }}">View Timeline</a></td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="6">No students found</td></tr>
+                <tr class="empty-row"><td colspan="6">No students found</td></tr>
                 {% endfor %}
             </tbody>
         </table>
+        </div>
         {% endif %}
 
         {% if selected_student %}
         <div class="top-head">
-            <h3>STUDENT ACTIVITY TIMELINE: {{ selected_student.name }} ({{ selected_student.registration_number }})</h3>
-            {% if can_manage_admin %}<a class="secondary-btn" href="{% url 'download_admin_table_excel' %}?scope=student_activity&student={{ selected_student.registration_number }}">Download Timeline</a>{% endif %}
+            <h3>Student Activity Timeline: {{ selected_student.name }} ({{ selected_student.registration_number }})</h3>
+            {% if can_manage_admin %}<a class="secondary-btn secondary-btn--outline" href="{% url 'download_admin_table_excel' %}?scope=student_activity&student={{ selected_student.registration_number }}">Download Timeline</a>{% endif %}
         </div>
+        <div class="table-scroll">
         <table>
             <thead>
                 <tr>
@@ -209,22 +240,23 @@
                     <td>{{ row.date }}</td>
                     <td>{{ row.pass_type }}</td>
                     <td>{{ row.campus_resource.name }}</td>
-                    <td>{{ row.start_time|time:"H:i:s" }}</td>
-                    <td>{{ row.hostel_checkout_time|date:"d M Y H:i:s"|default:"-" }}</td>
-                    <td>{{ row.library_in_time|date:"d M Y H:i:s"|default:"-" }}</td>
-                    <td>{{ row.library_out_time|date:"d M Y H:i:s"|default:"-" }}</td>
-                    <td>{{ row.hostel_checkin_time|date:"d M Y H:i:s"|default:"-" }}</td>
-                    <td>{% if row.pass_type != "DAY_SCHOLAR" and row.current_step == 1 or row.pass_type != "DAY_SCHOLAR" and row.current_step == 3 %}In Transit{% else %}{{ row.dashboard_status }}{% endif %}</td>
-                    <td>{{ row.violation_time|date:"d M Y H:i:s"|default:"-" }}</td>
+                    <td class="cell-time">{{ row.start_time|time:"H:i:s" }}</td>
+                    <td class="cell-time">{{ row.hostel_checkout_time|date:"d M Y H:i:s"|default:"-" }}</td>
+                    <td class="cell-time">{{ row.library_in_time|date:"d M Y H:i:s"|default:"-" }}</td>
+                    <td class="cell-time">{{ row.library_out_time|date:"d M Y H:i:s"|default:"-" }}</td>
+                    <td class="cell-time">{{ row.hostel_checkin_time|date:"d M Y H:i:s"|default:"-" }}</td>
+                    <td>{% if row.pass_type != "DAY_SCHOLAR" and row.current_step == 1 or row.pass_type != "DAY_SCHOLAR" and row.current_step == 3 %}<span class="status-badge status-badge--in-transit">In Transit</span>{% else %}<span class="status-badge status-badge--{{ row.dashboard_status|slugify }}">{{ row.dashboard_status }}</span>{% endif %}</td>
+                    <td class="cell-time">{{ row.violation_time|date:"d M Y H:i:s"|default:"-" }}</td>
                     <td>{{ row.violation_codes_display }}</td>
                     <td>{% if row.defaulter %}Yes{% else %}No{% endif %}</td>
                     <td>{% if blocked_on_selected %}Yes{% else %}No{% endif %}</td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="13">No activity found for this student</td></tr>
+                <tr class="empty-row"><td colspan="13">No activity found for this student</td></tr>
                 {% endfor %}
             </tbody>
         </table>
+        </div>
         {% endif %}
 
     </div>

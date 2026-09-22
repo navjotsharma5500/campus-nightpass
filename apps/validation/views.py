@@ -338,18 +338,73 @@ def analytics(request):
     monthly_labels = [m['month'].strftime("%B") for m in monthly_data]
     monthly_counts = [m['count'] for m in monthly_data]
 
+    total_passes = base_qs.count()
+    defaulters_total = base_qs.filter(defaulter=True).count()
+
+    # Student Type Distribution: current student population (not date-scoped).
+    student_type_totals = dict(
+        Student.objects.values_list('student_type').annotate(count=Count('registration_number'))
+    )
+    hosteller_total = student_type_totals.get(Student.HOSTELLER, 0)
+    day_scholar_total = student_type_totals.get(Student.DAY_SCHOLAR, 0)
+
+    # Pass Type Distribution: NightPass.pass_type within the selected date range.
+    pass_type_totals = dict(
+        base_qs.values_list('pass_type').annotate(count=Count('pass_id'))
+    )
+    hostel_pass_total = pass_type_totals.get('HOSTEL', 0)
+    outside_pass_total = pass_type_totals.get('OUTSIDE', 0)
+    day_scholar_pass_total = pass_type_totals.get('DAY_SCHOLAR', 0)
+
+    # Pass Activity / Outcome Breakdown: mutually exclusive buckets for the
+    # selected date range, evaluated with the same precedence as
+    # get_dashboard_status() (a defaulter is always a "Violation" first,
+    # regardless of its current step). A DAY_SCHOLAR pass never has a step 3
+    # and its step 1 means "booked, not yet arrived" rather than hostel
+    # transit, so it is excluded from "In Transit" exactly like the existing
+    # in_transit dashboard KPI.
+    non_defaulter = Q(defaulter=False) | Q(defaulter__isnull=True)
+    completed_total = base_qs.filter(non_defaulter, current_step=4).count()
+    in_library_total = base_qs.filter(non_defaulter, current_step=2, valid=True).count()
+    in_transit_total = base_qs.filter(
+        non_defaulter, valid=True, current_step__in=[1, 3]
+    ).exclude(pass_type="DAY_SCHOLAR").count()
+    expired_closed_total = base_qs.filter(non_defaulter, valid=False).exclude(current_step=4).count()
+    # Remainder (e.g. waiting at the hostel gate, or a Day Scholar pass booked
+    # but not yet checked in) is folded into a single catch-all bucket so the
+    # categories always add up to the total, even for edge-case pass states.
+    waiting_other_total = max(
+        total_passes - (
+            defaulters_total + completed_total + in_library_total
+            + in_transit_total + expired_closed_total
+        ),
+        0,
+    )
+
     context = {
         'total_students': Student.objects.count(),
-        'total_passes': base_qs.count(),
+        'total_passes': total_passes,
         'active_passes': base_qs.filter(valid=True).count(),
         'completed_passes': base_qs.filter(current_step=4).count(),
-        'defaulters': base_qs.filter(defaulter=True).count(),
+        'defaulters': defaulters_total,
         'daily_labels': daily_labels,
         'daily_counts': daily_counts,
         'monthly_labels': monthly_labels,
         'monthly_counts': monthly_counts,
         'from_date': from_date.isoformat(),
         'to_date': to_date.isoformat(),
+        'student_type_labels': ["Hostellers", "Day Scholars"],
+        'student_type_counts': [hosteller_total, day_scholar_total],
+        'pass_type_labels': ["Hostel", "Outside Hostel", "Day Scholar"],
+        'pass_type_counts': [hostel_pass_total, outside_pass_total, day_scholar_pass_total],
+        'outcome_labels': [
+            "Completed", "Currently in Library", "In Transit",
+            "Waiting / Active Other", "Violation", "Expired / Closed Other",
+        ],
+        'outcome_counts': [
+            completed_total, in_library_total, in_transit_total,
+            waiting_other_total, defaulters_total, expired_closed_total,
+        ],
     }
 
     return render(request, "nightpass/analytics.html", context)
