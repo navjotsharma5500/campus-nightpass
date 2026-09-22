@@ -113,11 +113,7 @@
         <td>{{ student.name }}</td>
         <td>{{ student.registration_number }}</td>
         <td>
-            {% if student.hostel %}
-                {{ student.hostel.name }}
-            {% else %}
-                <span class="red">No Hostel</span>
-            {% endif %}
+            {{ student.hostel_display }}
         </td>
 
         <td>
@@ -129,7 +125,9 @@
         </td>
 
         <td>
-            {% if student.is_checked_in %}
+            {% if student.student_type == "DAY_SCHOLAR" %}
+                <span>{{ student.status }}</span>
+            {% elif student.is_checked_in %}
                 <span class="green">Inside Hostel</span>
             {% else %}
                 {% if student.has_booked %}

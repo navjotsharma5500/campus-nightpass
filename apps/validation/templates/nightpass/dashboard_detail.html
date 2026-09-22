@@ -42,7 +42,7 @@
           <tr>
             <td>{{ student.name }}</td>
             <td>{{ student.registration_number }}</td>
-            <td>{% if student.hostel %}{{ student.hostel.name }}{% else %}-{% endif %}</td>
+            <td>{{ student.hostel_display }}</td>
             <td>{{ student.violation_flags }}</td>
           </tr>
           {% empty %}
@@ -72,7 +72,7 @@
           {% for row in entries %}
           <tr>
             <td>{{ row.user.student.name }}</td>
-            <td>{% if row.user.student.hostel %}{{ row.user.student.hostel.name }}{% else %}-{% endif %}</td>
+            <td>{{ row.user.student.hostel_display }}</td>
             <td>{{ row.date }}</td>
             <td>{{ row.dashboard_status }}</td>
             <td>{{ row.start_time|time:"H:i:s" }}</td>

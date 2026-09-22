@@ -4,7 +4,7 @@
 {% endblock %}
 {% block content %}
 <p>Full, hostel and picture modes match by trimmed, case-insensitive email. CSV must use UTF-8. XLSX identifiers should be stored as text to preserve leading zeros.</p>
-<p>Full sync accepts email, registration_number, name, hostel, room_number, gender, contact_number, parent_contact, year, picture.
+<p>Full sync accepts email, registration_number, name, hostel, room_number, gender, contact_number, parent_contact, year, picture, student_type (HOSTELLER or DAY_SCHOLAR).
 New students require registration_number and name. FULL sync cannot change existing registration numbers.
 Absent columns are preserved; blank optional values clear fields, except pictures which are preserved by default.</p>
 <p>Hostel mode requires email,hostel,room_number. Picture mode requires email,picture. Columns outside the selected mode are ignored and listed in Preview.

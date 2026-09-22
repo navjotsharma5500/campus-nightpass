@@ -19,8 +19,16 @@ class HostelAdmin(ImportExportModelAdmin):
     search_fields = ('name',)
 
 # 3. Repeat for CampusResource if you plan to import those too
+class CampusResourceResource(resources.ModelResource):
+    class Meta:
+        model = CampusResource
+        clean_model_instances = True
+
+
 class CampusResourceAdmin(ImportExportModelAdmin):
-    list_display = ('name', 'max_capacity', 'slots_booked', 'is_booking', 'is_display', 'booking_complete')
+    resource_class = CampusResourceResource
+    list_filter = ('audience_type',)
+    list_display = ('name', 'audience_type', 'max_capacity', 'slots_booked', 'is_booking', 'is_display', 'booking_complete')
     search_fields = ('name',)
 
 admin.site.register(CampusResource, CampusResourceAdmin)

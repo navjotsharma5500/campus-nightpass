@@ -80,7 +80,7 @@ def resolve_transit_timers(student, now=None):
         hostel_out_library_timer = policy.library_timer_for_hostel_out
         backend_timer = policy.backend_checkin_timer
 
-        if policy.enable_hostel_timers and student.hostel:
+        if policy.enable_hostel_timers and student.student_type == "HOSTELLER" and student.hostel:
             if student.hostel.frontend_checkin_timer is not None:
                 frontend_timer = student.hostel.frontend_checkin_timer
             if student.hostel.backend_checkin_timer is not None:
@@ -93,6 +93,8 @@ def resolve_transit_timers(student, now=None):
 
 
 def required_location(user_pass):
+    if user_pass.pass_type == "DAY_SCHOLAR":
+        return {STEP_LIBRARY_IN: "LIBRARY", STEP_LIBRARY_OUT: "LIBRARY"}.get(user_pass.current_step)
     if user_pass.pass_type == "OUTSIDE":
         mapping = {
             STEP_LIBRARY_IN: "LIBRARY",
@@ -149,6 +151,8 @@ def violation_code_for_step(step):
 def apply_overdue_violation(user_pass, effective_now=None, policy=None):
     effective_now = effective_now or timezone.now()
     policy = policy or resolve_active_policy(timezone.localdate(effective_now))
+    if user_pass.pass_type == "DAY_SCHOLAR" and user_pass.current_step != STEP_LIBRARY_OUT:
+        return False
     student = user_pass.user.student
     frontend_timer, hostel_out_library_timer, backend_timer = resolve_transit_timers(student, now=effective_now)
     added = False
@@ -199,9 +203,12 @@ def _close_pass(user_pass, now=None):
     student = user_pass.user.student
 
     student.has_booked = False
-    student.is_checked_in = True
-    student.hostel_checkin_time = student.hostel_checkin_time or now
-    student.save(update_fields=["has_booked", "is_checked_in", "hostel_checkin_time"])
+    if user_pass.pass_type == "DAY_SCHOLAR":
+        student.save(update_fields=["has_booked"])
+    else:
+        student.is_checked_in = True
+        student.hostel_checkin_time = student.hostel_checkin_time or now
+        student.save(update_fields=["has_booked", "is_checked_in", "hostel_checkin_time"])
 
     user_pass.valid = False
     user_pass.save(update_fields=["valid"])
@@ -247,10 +254,10 @@ def get_dashboard_status(user_pass, max_violations=None, now=None):
 
     mapping = {
         STEP_HOSTEL_OUT: "Booked",
-        STEP_LIBRARY_IN: "Hostel Out" if user_pass.pass_type != "OUTSIDE" else "Booked",
+        STEP_LIBRARY_IN: "Hostel Out" if user_pass.pass_type not in ("OUTSIDE", "DAY_SCHOLAR") else "Booked",
         STEP_LIBRARY_OUT: "Library IN",
         STEP_HOSTEL_IN: "Library Out",
-        STEP_COMPLETED: "Hostel IN",
+        STEP_COMPLETED: "Completed" if user_pass.pass_type == "DAY_SCHOLAR" else "Hostel IN",
     }
     return mapping.get(user_pass.current_step, "Booked")
 
@@ -266,10 +273,10 @@ def get_scanner_status(user_pass, now=None):
 
     mapping = {
         STEP_HOSTEL_OUT: "Night Pass Approved",
-        STEP_LIBRARY_IN: "Hostel OUT" if user_pass.pass_type != "OUTSIDE" else "Night Pass Approved",
+        STEP_LIBRARY_IN: "Hostel OUT" if user_pass.pass_type not in ("OUTSIDE", "DAY_SCHOLAR") else "Night Pass Approved",
         STEP_LIBRARY_OUT: "Library IN",
         STEP_HOSTEL_IN: "Library OUT",
-        STEP_COMPLETED: "Returned to Hostel",
+        STEP_COMPLETED: "Completed" if user_pass.pass_type == "DAY_SCHOLAR" else "Returned to Hostel",
     }
     return mapping.get(user_pass.current_step, "Night Pass Approved")
 

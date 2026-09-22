@@ -5,15 +5,19 @@ from import_export.results import RowResult
 
 from .models import Student, CustomUser
 
+from .services.student_type import prepare_student_type_row
+
 logger = logging.getLogger(__name__)
 
 class StudentResource(resources.ModelResource):
     class Meta:
         model = Student
-        fields = ('name', 'contact_number', 'registration_number','gender', 'branch', 'date_of_birth', 'father_name', 'mother_name', 'course', 'year', 'parent_contact', 'address', 'picture', 'hostel', 'room_number', 'email', 'user')
+        fields = ('name', 'contact_number', 'registration_number','gender', 'branch', 'date_of_birth', 'father_name', 'mother_name', 'course', 'year', 'parent_contact', 'address', 'picture', 'hostel', 'room_number', 'email', 'user', 'student_type')
+        export_order = fields
         import_id_fields = ('registration_number',)
 
     def before_import_row(self, row, **kwargs):
+        prepare_student_type_row(row)
         registration_number = str(row.get("registration_number") or "").strip()
         email = str(row.get("email") or "").strip()
         row["registration_number"] = registration_number

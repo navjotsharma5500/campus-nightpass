@@ -35,7 +35,8 @@ def _success_payload(student, user_pass, result):
         "user": {
             "name": student.name,
             "registration_number": student.registration_number,
-            "hostel": student.hostel.name if student.hostel else "N/A",
+            "hostel": student.hostel_display,
+            "student_type": student.get_student_type_display(),
             "picture": pic_url,
         },
         "task": {"check_in": False, "check_out": False},

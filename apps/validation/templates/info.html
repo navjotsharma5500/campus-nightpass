@@ -203,7 +203,7 @@
                     <tr>
                         <td>{{ row.user.student.name }}</td>
                         <td>{{ row.user.student.registration_number }}</td>
-                        <td>{% if row.user.student.hostel %}{{ row.user.student.hostel.name }}{% else %}-{% endif %}</td>
+                        <td>{{ row.user.student.hostel_display }}</td>
                         <td>{{ row.pass_type_label }}</td>
                         <td>
                             <span class="status-pill {% if row.defaulter %}violation{% elif row.current_step == 4 %}complete{% else %}in-progress{% endif %}">

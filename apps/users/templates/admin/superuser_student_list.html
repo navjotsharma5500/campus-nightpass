@@ -69,7 +69,7 @@
                         </td>
                         <td>{{ student.name }}</td>
                         <td>{{ student.registration_number }}</td>
-                        <td>{% if student.hostel %}{{ student.hostel.name }}{% else %}-{% endif %}</td>
+                        <td>{{ student.hostel_display }}</td>
                         <td>{% if mode == "violations" or mode == "blocked" %}{{ student.violation_flags }}{% else %}{{ student.defaulter_count }}{% endif %}</td>
                         <td>
                             {% if student.active_restriction %}

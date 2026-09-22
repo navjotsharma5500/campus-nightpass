@@ -22,7 +22,7 @@
     <section class="np-admin-hero">
         <div class="np-admin-kicker">Thapar NightPass</div>
         <h1>{{ title }}</h1>
-        <p>{{ student.registration_number }}{% if student.hostel %} | {{ student.hostel.name }}{% endif %}</p>
+        <p>{{ student.registration_number }} | {{ student.get_student_type_display }} | {{ student.hostel_display }}</p>
         <p>
             {% if mode == "violations" %}
             <a href="{% url 'superuser_violations' %}">Back to Violations</a>

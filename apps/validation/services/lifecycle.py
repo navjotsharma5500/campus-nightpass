@@ -46,7 +46,7 @@ def _violation_payload(step):
 
 
 def transition_checkout_from_hostel(user_pass):
-    if user_pass.current_step != STEP_HOSTEL_OUT:
+    if user_pass.pass_type == "DAY_SCHOLAR" or user_pass.current_step != STEP_HOSTEL_OUT:
         return {"status": False, "reason_code": "INVALID_TRANSITION", "message": "Invalid step for Hostel Exit."}
 
     now = timezone.now()
@@ -77,7 +77,7 @@ def transition_checkin_to_library(user_pass):
         allowed_minutes = hostel_out_library_timer
 
     late_scan = False
-    if transit_start:
+    if transit_start and user_pass.pass_type != "DAY_SCHOLAR":
         transit = now - transit_start
         if transit > timedelta(minutes=allowed_minutes):
             late_scan = True
@@ -132,9 +132,15 @@ def transition_checkout_from_library(user_pass):
 
     user_pass.library_out_time = now
     user_pass.current_step = STEP_HOSTEL_IN
+    if user_pass.pass_type == "DAY_SCHOLAR":
+        user_pass.current_step = STEP_COMPLETED
+        user_pass.valid = False
+        student.has_booked = False
+        student.save(update_fields=["has_booked"])
     user_pass.save(
         update_fields=[
             "library_out_time",
+            "valid",
             "current_step",
             "defaulter",
             "defaulter_remarks",
@@ -151,7 +157,7 @@ def transition_checkout_from_library(user_pass):
 
 def transition_checkin_to_hostel(student):
     user_pass = student.user.nightpass_set.filter(valid=True).order_by("-date", "-start_time").first()
-    if not user_pass or user_pass.current_step != STEP_HOSTEL_IN:
+    if not user_pass or user_pass.pass_type == "DAY_SCHOLAR" or user_pass.current_step != STEP_HOSTEL_IN:
         return {"status": False, "reason_code": "INVALID_TRANSITION", "message": "Must exit library first."}
 
     now = timezone.now()

@@ -165,3 +165,6 @@ cython_debug/
 
 
 
+
+# Public header-only student sync template (no student data).
+!docs/student-full-sync-template.csv

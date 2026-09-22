@@ -11,7 +11,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 from ..global_settings.models import Settings as settings
 from ..users.models import NightPass
-from ..users.services.pass_policy import get_active_pass_for_user, get_slot_cancel_time, has_any_scan_activity
+from ..users.services.pass_policy import get_active_pass_for_user, get_slot_cancel_time, has_any_scan_activity, resolve_transit_timers
 from .models import CampusResource
 from .services.booking_service import create_pass_for_student
 
@@ -30,13 +30,8 @@ def campus_resources_home(request):
             Q(defaulter=True) | Q(violation_code__gt="")
         )
 
-        if Settings.enable_hostel_timers:
-            frontend_timer = user.student.hostel.frontend_checkin_timer
-            backend_timer = user.student.hostel.backend_checkin_timer
-        else:
-            frontend_timer = Settings.frontend_checkin_timer
-            backend_timer = Settings.backend_checkin_timer
-        hostel_out_library_timer = Settings.library_timer_for_hostel_out or 30
+        campus_resources = campus_resources.filter(audience_type=user.student.student_type)
+        frontend_timer, hostel_out_library_timer, backend_timer = resolve_transit_timers(user.student)
 
         transit_timer_minutes = frontend_timer
         if user_pass and user_pass.current_step == 1 and user_pass.pass_type == "OUTSIDE":
@@ -134,6 +129,7 @@ def hostel_home(request):
             hostel_passes = NightPass.objects.filter(valid=True, user__student__hostel=hostel) | NightPass.objects.filter(date=date.today(), user__student__hostel=hostel)
         else:
             hostel_passes = NightPass.objects.filter(valid=True) | NightPass.objects.filter(date=date.today())
+        hostel_passes = hostel_passes.exclude(pass_type='DAY_SCHOLAR')
         return render(request, 'caretaker.html', {'hostel_passes': hostel_passes})
     else:
         return redirect('scanner')

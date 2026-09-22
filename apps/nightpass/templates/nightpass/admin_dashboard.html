@@ -119,8 +119,8 @@
             <tbody>
 {% for checkin in recent_checkins %}
 <tr>
-    <td>{{ checkin.user.student.name }}</td>
-    <td>{% if checkin.user.student.hostel %}{{ checkin.user.student.hostel.name }}{% else %}-{% endif %}</td>
+    <td>{{ checkin.user.student.name }} <small>{{ checkin.user.student.get_student_type_display }}</small></td>
+    <td>{{ checkin.user.student.hostel_display }}</td>
     <td>{{ checkin.start_time|time:"H:i:s" }}</td>
     <td>{{ checkin.hostel_checkout_time|date:"d M Y H:i:s"|default:"-" }}</td>
     <td>{{ checkin.library_in_time|date:"d M Y H:i:s"|default:"-" }}</td>
@@ -169,7 +169,7 @@
                     <td>{{ student.name }}</td>
                     <td>{{ student.registration_number }}</td>
                     <td>{{ student.user.email }}</td>
-                    <td>{% if student.hostel %}{{ student.hostel.name }}{% else %}-{% endif %}</td>
+                    <td>{{ student.hostel_display }}</td>
                     <td>{{ student.violation_flags }}</td>
                     <td><a href="?date={{ selected_date }}&activity={{ activity_tab }}&q={{ search_term }}&student={{ student.registration_number }}">View Timeline</a></td>
                 </tr>
@@ -214,7 +214,7 @@
                     <td>{{ row.library_in_time|date:"d M Y H:i:s"|default:"-" }}</td>
                     <td>{{ row.library_out_time|date:"d M Y H:i:s"|default:"-" }}</td>
                     <td>{{ row.hostel_checkin_time|date:"d M Y H:i:s"|default:"-" }}</td>
-                    <td>{% if row.current_step == 1 or row.current_step == 3 %}In Transit{% else %}{{ row.dashboard_status }}{% endif %}</td>
+                    <td>{% if row.pass_type != "DAY_SCHOLAR" and row.current_step == 1 or row.pass_type != "DAY_SCHOLAR" and row.current_step == 3 %}In Transit{% else %}{{ row.dashboard_status }}{% endif %}</td>
                     <td>{{ row.violation_time|date:"d M Y H:i:s"|default:"-" }}</td>
                     <td>{{ row.violation_codes_display }}</td>
                     <td>{% if row.defaulter %}Yes{% else %}No{% endif %}</td>

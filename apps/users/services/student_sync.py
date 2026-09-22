@@ -13,6 +13,8 @@ from django.utils import timezone
 from apps.nightpass.models import Hostel
 from apps.users.models import Admin, CustomUser, Security, Student
 
+from .student_type import normalize_student_type
+
 logger = logging.getLogger("apps.users.student_sync")
 BATCH_SIZE = 500
 MAX_ROWS = 20000
@@ -20,7 +22,7 @@ MAX_BYTES = 10 * 1024 * 1024
 PICTURE_HEADERS = {"picture", "url", "picture_url", "image_url"}
 FIELDS = {
     "full": {"email", "registration_number", "name", "hostel", "room_number",
-             "gender", "contact_number", "parent_contact", "year", "picture"},
+             "gender", "contact_number", "parent_contact", "year", "picture", "student_type"},
     "hostel": {"email", "hostel", "room_number"},
     "picture": {"email", "picture"},
     "identity": {"user", "registration_number", "email"},
@@ -219,8 +221,17 @@ def preview_sync(headers, rows, mode, clear="none", allow_blank_picture=False, l
         if mode != "full" and not student:
             errors.append(f"no existing student for {email}")
         values = {}
-        for key in (set(headers) & FIELDS[mode]) - {"email", "registration_number"}:
+        explicit_day_scholar = False
+        if mode == "full" and "student_type" in headers:
+            try:
+                values["student_type"] = normalize_student_type(row.get("student_type"))
+                explicit_day_scholar = values["student_type"] == Student.DAY_SCHOLAR
+            except ValidationError as exc:
+                errors.extend(exc.messages)
+        for key in (set(headers) & FIELDS[mode]) - {"email", "registration_number", "student_type"}:
             value = row.get(key, "").strip()
+            if explicit_day_scholar and key in {"hostel", "room_number"}:
+                continue
             if key == "picture" and not value and not allow_blank_picture:
                 continue
             if key == "hostel":
@@ -238,6 +249,8 @@ def preview_sync(headers, rows, mode, clear="none", allow_blank_picture=False, l
             except ValidationError as exc:
                 errors.append(f"{key}: {'; '.join(exc.messages)}")
             values[key] = value
+        if explicit_day_scholar:
+            values.update(hostel_id=None, room_number=None)
         if mode == "full":
             values["email"] = email
             reg = row.get("registration_number", "").strip()

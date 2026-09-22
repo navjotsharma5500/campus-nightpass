@@ -1,4 +1,5 @@
 from django.db import models
+from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
 
 class Hostel(models.Model):
@@ -15,10 +16,22 @@ class Hostel(models.Model):
         return self.name
 
 class CampusResource(models.Model):
+    HOSTELLER = "HOSTELLER"
+    DAY_SCHOLAR = "DAY_SCHOLAR"
+    AUDIENCE_CHOICES = ((HOSTELLER, "Hosteller"), (DAY_SCHOLAR, "Day Scholar"))
+    audience_type = models.CharField(max_length=20, choices=AUDIENCE_CHOICES, default=HOSTELLER)
+
+    def clean(self):
+        super().clean()
+        allowed = ("DAY_SCHOLAR",) if self.audience_type == self.DAY_SCHOLAR else ("HOSTEL", "OUTSIDE")
+        if self.default_pass_type not in allowed:
+            raise ValidationError({"default_pass_type": "Pass type must match the resource audience: Day Scholar uses DAY_SCHOLAR; Hosteller uses HOSTEL or OUTSIDE."})
+
     # 1. Standardized choices to match your users/models.py logic
     PASS_TYPE_CHOICES = [
         ('HOSTEL', 'Starting from Hostel (5 Scans)'),
         ('OUTSIDE', 'Starting from Outside (3 Scans)'),
+        ('DAY_SCHOLAR', 'Day Scholar (2 Scans)'),
     ]
 
     name = models.CharField(max_length=100)

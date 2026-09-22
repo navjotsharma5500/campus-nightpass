@@ -83,6 +83,11 @@ class Admin(models.Model):
         return self.name
 
 class Student(models.Model):
+    HOSTELLER = "HOSTELLER"
+    DAY_SCHOLAR = "DAY_SCHOLAR"
+    STUDENT_TYPE_CHOICES = ((HOSTELLER, "Hosteller"), (DAY_SCHOLAR, "Day Scholar"))
+    student_type = models.CharField(max_length=20, choices=STUDENT_TYPE_CHOICES, default=HOSTELLER)
+
     name = models.CharField(max_length=100)
     contact_number = models.CharField(max_length=15, null=True, blank=True)
     registration_number = models.CharField(max_length=20,primary_key=True)
@@ -112,11 +117,17 @@ class Student(models.Model):
         return str(self.registration_number)
 
     @property
+    def hostel_display(self):
+        return self.hostel.name if self.student_type == self.HOSTELLER and self.hostel else "N/A"
+
+    @property
     def status(self):
         from .services.pass_policy import get_active_pass_for_user
 
         active_pass = get_active_pass_for_user(self.user)
         if not active_pass:
+            if self.student_type == self.DAY_SCHOLAR:
+                return "No active pass"
             return "Inside Hostel" if self.is_checked_in else "In Transit"
         return active_pass.status_message
 
@@ -145,6 +156,7 @@ class NightPass(models.Model):
     TYPE_CHOICES = (
         ('HOSTEL', 'Starting from Hostel (5 Scans)'),
         ('OUTSIDE', 'Starting from Outside (3 Scans)'),
+        ('DAY_SCHOLAR', 'Day Scholar (2 Scans)'),
     )
 
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
@@ -181,7 +193,7 @@ class NightPass(models.Model):
             self.pass_type = self.campus_resource.default_pass_type
 
             if self._state.adding:
-                if self.pass_type == 'OUTSIDE':
+                if self.pass_type in ('OUTSIDE', 'DAY_SCHOLAR'):
                     self.current_step = 1
                 else:
                     self.current_step = 0
@@ -197,7 +209,7 @@ class NightPass(models.Model):
         if not self.valid:
             return "Pass Closed" if self.current_step == STEP_COMPLETED else "Pass Expired"
 
-        if self.pass_type == 'OUTSIDE' or self.campus_resource.default_pass_type == 'OUTSIDE':
+        if self.pass_type in ('OUTSIDE', 'DAY_SCHOLAR') or self.campus_resource.default_pass_type == 'OUTSIDE':
             if self.current_step == STEP_LIBRARY_IN and not self.library_in_time:
                 return "Proceed to Library IN"
             if self.current_step == STEP_LIBRARY_OUT:
@@ -220,6 +232,8 @@ class NightPass(models.Model):
     def is_late_in_transit(self):
         from .services.pass_policy import STEP_HOSTEL_IN, STEP_LIBRARY_IN, resolve_transit_timers
 
+        if self.pass_type == "DAY_SCHOLAR":
+            return False
         now = timezone.now()
         student = self.user.student
         frontend_timer, hostel_out_library_timer, backend_timer = resolve_transit_timers(student, now=now)

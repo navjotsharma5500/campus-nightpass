@@ -25,6 +25,8 @@ from apps.nightpass.models import Hostel
 from .models import Student, NightPass, Security, Admin, CustomUser
 from .services.student_identity import change_student_registration_number
 
+from .services.student_type import prepare_student_type_row
+
 User = get_user_model()
 logger = logging.getLogger(__name__)
 admin.site.index_template = "admin/index.html"
@@ -76,6 +78,7 @@ class NightPassAdmin(admin.ModelAdmin):
     list_filter = (
         ('date', DateRangeFilter),
         'campus_resource',
+        'user__student__student_type',
         'user__student__gender',
         'user__student__hostel',
         YearWiseFilter,
@@ -98,8 +101,8 @@ class NightPassAdmin(admin.ModelAdmin):
         return obj.user.student.name if hasattr(obj.user, "student") else "-"
 
     def hostel(self, obj):
-        if hasattr(obj.user, "student") and obj.user.student.hostel:
-            return obj.user.student.hostel.name
+        if hasattr(obj.user, "student"):
+            return obj.user.student.hostel_display
         return "-"
 
     hostel.short_description = "Hostel"
@@ -129,7 +132,7 @@ class NightPassAdmin(admin.ModelAdmin):
             row = [
                 student.name if student else "-",
                 obj.user.email,
-                student.hostel.name if student and student.hostel else "-",
+                student.hostel_display if student else "-",
                 student.gender if student else "-",
                 obj.pass_id,
                 obj.date.strftime('%d/%m/%y'),
@@ -192,10 +195,13 @@ class StudentResource(resources.ModelResource):
             "parent_contact",
             "year",
             "user",
-            "picture"
+            "picture",
+            "student_type",
         )
+        export_order = fields
 
     def before_import_row(self, row, **kwargs):
+        prepare_student_type_row(row)
         registration_number = str(row.get("registration_number") or "").strip()
         email = str(row.get("email") or "").strip()
         row["registration_number"] = registration_number
@@ -405,6 +411,7 @@ class StudentAdmin(ImportExportModelAdmin):
     list_display = (
         'name',
         'registration_number',
+        'student_type',
         'hostel',
         'has_booked',
         'hostel_out_status',
@@ -427,7 +434,7 @@ class StudentAdmin(ImportExportModelAdmin):
 
     readonly_fields = ('last_checkout_time',)
 
-    list_filter = ('hostel', YearWiseFilter, 'has_booked', 'violation_flags')
+    list_filter = ('student_type', 'hostel', YearWiseFilter, 'has_booked', 'violation_flags')
 
     def get_readonly_fields(self, request, obj=None):
         fields = list(super().get_readonly_fields(request, obj))
@@ -508,6 +515,8 @@ class StudentAdmin(ImportExportModelAdmin):
             )
 
     def current_location(self, obj):
+        if obj.student_type == Student.DAY_SCHOLAR:
+            return obj.status
 
         if obj.is_checked_in:
             if obj.hostel:
@@ -540,6 +549,8 @@ class StudentAdmin(ImportExportModelAdmin):
         return format_html("<span style='color:{};font-weight:700;'>{}</span>", "#16a34a" if value else "#dc2626", "✓" if value else "✗")
 
     def hostel_out_status(self, obj):
+        if obj.student_type == Student.DAY_SCHOLAR:
+            return "N/A"
         user_pass = self._latest_student_pass(obj)
         return self._tick_cross(bool(user_pass and user_pass.hostel_checkout_time))
 
@@ -552,6 +563,8 @@ class StudentAdmin(ImportExportModelAdmin):
         return self._tick_cross(bool(user_pass and user_pass.library_out_time))
 
     def hostel_in_status(self, obj):
+        if obj.student_type == Student.DAY_SCHOLAR:
+            return "N/A"
         user_pass = self._latest_student_pass(obj)
         return self._tick_cross(bool(user_pass and user_pass.hostel_checkin_time))
 

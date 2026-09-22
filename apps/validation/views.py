@@ -70,7 +70,7 @@ def _format_pass_for_dashboard(user_pass, max_violations):
 
 
 def _format_pass_for_scanner(user_pass):
-    user_pass.pass_type_label = "Outside Hostel" if user_pass.pass_type == "OUTSIDE" else "Hostel"
+    user_pass.pass_type_label = {"OUTSIDE": "Outside Hostel", "DAY_SCHOLAR": "Day Scholar"}.get(user_pass.pass_type, "Hostel")
     user_pass.scanner_status = get_scanner_status(user_pass)
     return user_pass
 
@@ -97,7 +97,7 @@ def _blocked_students_queryset(max_violations):
 
 def _apply_activity_filter(queryset, activity_tab, max_violations):
     if activity_tab == "in_transit":
-        return queryset.filter(current_step__in=[1, 3])
+        return queryset.filter(current_step__in=[1, 3]).exclude(pass_type="DAY_SCHOLAR")
     if activity_tab == "in_library":
         return queryset.filter(current_step=2)
     if activity_tab == "complete":
@@ -194,6 +194,7 @@ def scanner(request):
     scanner_view = "library"
     if security_profile and security_profile.scanner_type == "HOSTEL":
         scanner_view = "hostel"
+        student_passes = student_passes.exclude(pass_type="DAY_SCHOLAR")
         if security_profile.hostel_id:
             student_passes = student_passes.filter(user__student__hostel_id=security_profile.hostel_id)
 
@@ -283,7 +284,7 @@ def admin_dashboard(request):
         ).count(),
         "active_passes": today_passes.filter(valid=True).count(),
         "completed_today": today_passes.filter(current_step=4).count(),
-        "in_transit": today_passes.filter(valid=True, current_step__in=[1, 3]).count(),
+        "in_transit": today_passes.filter(valid=True, current_step__in=[1, 3]).exclude(pass_type="DAY_SCHOLAR").count(),
         "violation_count": today_passes.filter(defaulter=True).count(),
         "blocked_students": _blocked_students_queryset(max_violations).count(),
         "recent_checkins": recent_checkins,
@@ -410,7 +411,7 @@ def download_report_range(request):
         sheet.append([
             student.name,
             student.registration_number,
-            student.hostel.name if student.hostel else "",
+            student.hostel_display,
             _excel_datetime(p.hostel_checkout_time),
             _excel_datetime(p.library_in_time),
             _excel_datetime(p.library_out_time),
@@ -465,7 +466,7 @@ def dashboard_detail(request, segment):
         entries = passes_qs.filter(defaulter=True)
     elif segment == "in-transit":
         title = "IN Transit"
-        entries = passes_qs.filter(valid=True, current_step__in=[1, 3])
+        entries = passes_qs.filter(valid=True, current_step__in=[1, 3]).exclude(pass_type="DAY_SCHOLAR")
     elif segment == "completed-today":
         title = "Complete Today"
         entries = passes_qs.filter(current_step=4)
@@ -534,7 +535,7 @@ def download_admin_table_excel(request):
         for row in rows:
             sheet.append([
                 row.user.student.name,
-                row.user.student.hostel.name if row.user.student.hostel else "-",
+                row.user.student.hostel_display,
                 row.start_time.strftime("%H:%M:%S") if row.start_time else "-",
                 row.hostel_checkout_time.strftime("%d %b %Y %H:%M:%S") if row.hostel_checkout_time else "-",
                 row.library_in_time.strftime("%d %b %Y %H:%M:%S") if row.library_in_time else "-",
@@ -557,7 +558,7 @@ def download_admin_table_excel(request):
         elif segment == "voilation":
             entries = passes_qs.filter(defaulter=True)
         elif segment == "in-transit":
-            entries = passes_qs.filter(valid=True, current_step__in=[1, 3])
+            entries = passes_qs.filter(valid=True, current_step__in=[1, 3]).exclude(pass_type="DAY_SCHOLAR")
         elif segment == "completed-today":
             entries = passes_qs.filter(current_step=4)
         elif segment == "blocked-students":
@@ -570,7 +571,7 @@ def download_admin_table_excel(request):
                 sheet.append([
                     student.name,
                     student.registration_number,
-                    student.hostel.name if student.hostel else "-",
+                    student.hostel_display,
                     student.violation_flags,
                 ])
         else:
@@ -593,7 +594,7 @@ def download_admin_table_excel(request):
             for row in rows:
                 sheet.append([
                     row.user.student.name,
-                    row.user.student.hostel.name if row.user.student.hostel else "-",
+                    row.user.student.hostel_display,
                     row.date.strftime("%Y-%m-%d") if row.date else "-",
                     row.dashboard_status,
                     row.start_time.strftime("%H:%M:%S") if row.start_time else "-",
@@ -641,7 +642,7 @@ def download_admin_table_excel(request):
                     student.name,
                     student.registration_number,
                     student.user.email,
-                    student.hostel.name if student.hostel else "-",
+                    student.hostel_display,
                     row.date.strftime("%Y-%m-%d") if row.date else "-",
                     row.pass_type,
                     row.campus_resource.name if row.campus_resource else "-",
@@ -668,7 +669,7 @@ def download_admin_table_excel(request):
                 student.name,
                 student.registration_number,
                 student.user.email if student.user else "-",
-                student.hostel.name if student.hostel else "-",
+                student.hostel_display,
                 student.violation_flags,
                 "Yes" if student.violation_flags >= max_violations else "No",
             ])
@@ -678,14 +679,16 @@ def download_admin_table_excel(request):
         headers = ["Name", "Registration", "Hostel", "Booked", "Status", "Violations"]
         sheet.append(headers)
         for student in students:
-            if student.is_checked_in:
+            if student.student_type == Student.DAY_SCHOLAR:
+                status = student.status
+            elif student.is_checked_in:
                 status = "Inside Hostel"
             else:
                 status = "Outside (Active Pass)" if student.has_booked else "Outside (No Pass)"
             sheet.append([
                 student.name,
                 student.registration_number,
-                student.hostel.name if student.hostel else "No Hostel",
+                student.hostel_display,
                 "Yes" if student.has_booked else "No",
                 status,
                 student.violation_flags,

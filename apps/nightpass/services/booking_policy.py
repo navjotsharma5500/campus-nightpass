@@ -20,6 +20,12 @@ def _format_booking_time(value):
 
 
 def validate_booking_policy(student, campus_resource):
+    if student.student_type != campus_resource.audience_type:
+        return _response("AUDIENCE_MISMATCH", "This resource is not available for your student type.")
+    allowed = ("DAY_SCHOLAR",) if campus_resource.audience_type == "DAY_SCHOLAR" else ("HOSTEL", "OUTSIDE")
+    if campus_resource.default_pass_type not in allowed:
+        return _response("INVALID_RESOURCE_CONFIGURATION", "Resource audience and pass type do not match. Contact the administrator.")
+    is_hosteller = student.student_type == "HOSTELLER"
     policy = resolve_active_policy()
     if not policy:
         return _response("NO_ACTIVE_POLICY", "No active booking policy found.")
@@ -50,7 +56,7 @@ def validate_booking_policy(student, campus_resource):
             f"Please book between {_format_booking_time(campus_resource.start_time)} and {_format_booking_time(campus_resource.end_time)}.",
         )
 
-    if policy.last_out_from_hostel and now.time() > policy.last_out_from_hostel:
+    if is_hosteller and policy.last_out_from_hostel and now.time() > policy.last_out_from_hostel:
         return _response("TIME_OVER_LAST_OUT_FROM_HOSTEL", "Time is over.")
 
     if int(student.violation_flags) >= int(policy.max_violation_count):
@@ -98,7 +104,7 @@ def validate_booking_policy(student, campus_resource):
             if year_count >= configured_limit:
                 return _response("YEAR_QUOTA_FULL", "All slots are booked for today!")
 
-    if policy.enable_hostel_limits and student.hostel:
+    if is_hosteller and policy.enable_hostel_limits and student.hostel:
         hostel_count = NightPass.objects.filter(
             valid=True,
             campus_resource=campus_resource,

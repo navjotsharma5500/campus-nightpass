@@ -305,3 +305,14 @@ PostgreSQL identity uploads lock the user, student, admin and security
 tables against concurrent writes because the existing email uniqueness constraint
 is case-sensitive. Reads remain available. SQLite serializes writes; a concurrent
 write conflict fails safely and requires a fresh preview/retry. No migration is needed.
+
+
+### Student type (FULL STUDENT SYNC)
+
+Use [student-full-sync-template.csv](student-full-sync-template.csv); `student_type` is the last column, as in Student admin exports. Canonical values are `HOSTELLER` and `DAY_SCHOLAR`. Imports accept case variants, `hostler`, `day scholar`, and `day-scholar`.
+
+Omitting the column preserves an existing student's type and defaults new students to `HOSTELLER`. A supplied blank or invalid value is rejected. Explicit `DAY_SCHOLAR` clears hostel and room assignments, including assignments supplied in the same row. This does not change the user ID, registration number, pass history, violations, pictures, or active booking state. Full sync still cannot change registration numbers. IDENTITY UPDATE, HOSTEL / ROOM, and PICTURE modes ignore this column and retain their existing behavior.
+
+Configure a Day Scholar CampusResource in Django admin with audience **Day Scholar** and default pass type **Day Scholar (2 Scans)**. Set its own capacity and booking window, then enable display and booking when ready. Hosteller resources retain audience **Hosteller** and pass type **HOSTEL** or **OUTSIDE**. Audience and pass type must agree. Day Scholars use the existing Library scanner for IN then OUT; OUT completes their pass. Global scan windows and Library OUT cutoff still apply; hostel timers and limits do not.
+
+Change student types between active bookings where possible: sync deliberately preserves existing passes, which retain their original workflow. No Day Scholar resource is created by migrations.
