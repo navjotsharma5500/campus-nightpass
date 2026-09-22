@@ -242,6 +242,10 @@ body {
     grid-template-columns: repeat(3, 1fr);
 }
 
+.chart-grid--hostel {
+    grid-template-columns: 1fr;
+}
+
 .chart-card {
     background: var(--an-surface);
     border: 1px solid var(--an-border);

@@ -338,6 +338,27 @@ def analytics(request):
     monthly_labels = [m['month'].strftime("%B") for m in monthly_data]
     monthly_counts = [m['count'] for m in monthly_data]
 
+    # Night Passes by Hostel: Hosteller passes (HOSTEL + OUTSIDE) in the
+    # selected date range, grouped by the student's currently assigned
+    # hostel. This joins historical NightPass rows to the student's current
+    # Student/Hostel relation, so it reflects present-day hostel assignment
+    # rather than a historical snapshot at the time of each pass.
+    hostel_data = base_qs.filter(
+        user__student__student_type=Student.HOSTELLER,
+        user__student__hostel__isnull=False,
+        pass_type__in=["HOSTEL", "OUTSIDE"],
+    ).values(
+        "user__student__hostel__name"
+    ).annotate(
+        count=Count("pass_id")
+    ).order_by(
+        "-count",
+        "user__student__hostel__name",
+    )
+
+    hostel_labels = [h["user__student__hostel__name"] for h in hostel_data]
+    hostel_counts = [h["count"] for h in hostel_data]
+
     total_passes = base_qs.count()
     defaulters_total = base_qs.filter(defaulter=True).count()
 
@@ -405,6 +426,8 @@ def analytics(request):
             completed_total, in_library_total, in_transit_total,
             waiting_other_total, defaulters_total, expired_closed_total,
         ],
+        'hostel_labels': hostel_labels,
+        'hostel_counts': hostel_counts,
     }
 
     return render(request, "nightpass/analytics.html", context)

@@ -400,3 +400,131 @@ class AnalyticsPageEnhancementTests(TestCase):
         self.assertEqual(sum(response.context["outcome_counts"]), 0)
         self.assertEqual(sum(response.context["pass_type_counts"]), 0)
 
+    def test_hostel_chart_counts_hostel_and_outside_passes(self):
+        today = timezone.localdate()
+        self._create_pass(self.hosteller_user, self.hostel_resource, today, current_step=1)
+        self._create_pass(self.hosteller_user, self.outside_resource, today, current_step=1)
+
+        response = self.client.get(
+            client_path("analytics"),
+            {"from_date": today.isoformat(), "to_date": today.isoformat()},
+        )
+
+        self.assertEqual(response.context["hostel_labels"], [self.hostel.name])
+        self.assertEqual(response.context["hostel_counts"], [2])
+
+    def test_hostel_chart_excludes_day_scholar_passes(self):
+        today = timezone.localdate()
+        self._create_pass(self.hosteller_user, self.hostel_resource, today, current_step=1)
+        self._create_pass(self.day_scholar_user, self.day_scholar_resource, today, current_step=1)
+
+        response = self.client.get(
+            client_path("analytics"),
+            {"from_date": today.isoformat(), "to_date": today.isoformat()},
+        )
+
+        self.assertEqual(response.context["hostel_labels"], [self.hostel.name])
+        self.assertEqual(response.context["hostel_counts"], [1])
+
+    def test_hostel_chart_excludes_students_with_no_hostel(self):
+        today = timezone.localdate()
+        homeless_user = CustomUser.objects.create_user(
+            email="homeless@example.com",
+            password="pass12345",
+            user_type="student",
+        )
+        Student.objects.create(
+            user=homeless_user,
+            name="Homeless Hosteller",
+            registration_number="ANLNOHOSTEL01",
+            hostel=None,
+            student_type=Student.HOSTELLER,
+        )
+        self._create_pass(self.hosteller_user, self.hostel_resource, today, current_step=1)
+        self._create_pass(homeless_user, self.hostel_resource, today, current_step=1)
+
+        response = self.client.get(
+            client_path("analytics"),
+            {"from_date": today.isoformat(), "to_date": today.isoformat()},
+        )
+
+        self.assertEqual(response.context["hostel_labels"], [self.hostel.name])
+        self.assertEqual(response.context["hostel_counts"], [1])
+
+    def test_hostel_chart_respects_selected_date_range(self):
+        today = timezone.localdate()
+        yesterday = today - timedelta(days=1)
+        self._create_pass(self.hosteller_user, self.hostel_resource, today, current_step=1)
+        self._create_pass(self.hosteller_user, self.hostel_resource, yesterday, current_step=1)
+
+        response = self.client.get(
+            client_path("analytics"),
+            {"from_date": today.isoformat(), "to_date": today.isoformat()},
+        )
+
+        self.assertEqual(response.context["hostel_labels"], [self.hostel.name])
+        self.assertEqual(response.context["hostel_counts"], [1])
+
+    def test_hostel_chart_orders_by_count_descending(self):
+        today = timezone.localdate()
+        second_hostel = Hostel.objects.create(
+            name="Second Analytics Hostel",
+            contact_number="9999999997",
+            email="second-analytics-hostel@example.com",
+        )
+        second_hosteller_user = CustomUser.objects.create_user(
+            email="second-hosteller@example.com",
+            password="pass12345",
+            user_type="student",
+        )
+        Student.objects.create(
+            user=second_hosteller_user,
+            name="Second Hosteller",
+            registration_number="ANLHOST02",
+            hostel=second_hostel,
+            student_type=Student.HOSTELLER,
+        )
+
+        # "Analytics Hostel" gets 2 passes, "Second Analytics Hostel" gets 1.
+        self._create_pass(self.hosteller_user, self.hostel_resource, today, current_step=1)
+        self._create_pass(self.hosteller_user, self.outside_resource, today, current_step=1)
+        self._create_pass(second_hosteller_user, self.hostel_resource, today, current_step=1)
+
+        response = self.client.get(
+            client_path("analytics"),
+            {"from_date": today.isoformat(), "to_date": today.isoformat()},
+        )
+
+        self.assertEqual(
+            response.context["hostel_labels"],
+            [self.hostel.name, second_hostel.name],
+        )
+        self.assertEqual(response.context["hostel_counts"], [2, 1])
+
+    def test_hostel_chart_excludes_day_scholar_pass_type_for_hosteller_student(self):
+        today = timezone.localdate()
+        # Inconsistent record: a HOSTELLER student (with a hostel assigned)
+        # who nonetheless has a DAY_SCHOLAR-typed NightPass. The chart counts
+        # by NightPass.pass_type, not just student_type, so this must be excluded.
+        self._create_pass(self.hosteller_user, self.day_scholar_resource, today, current_step=1)
+
+        response = self.client.get(
+            client_path("analytics"),
+            {"from_date": today.isoformat(), "to_date": today.isoformat()},
+        )
+
+        self.assertEqual(response.context["hostel_labels"], [])
+        self.assertEqual(response.context["hostel_counts"], [])
+
+    def test_hostel_chart_empty_when_no_hosteller_passes_in_range(self):
+        future_date = timezone.localdate() + timedelta(days=365)
+
+        response = self.client.get(
+            client_path("analytics"),
+            {"from_date": future_date.isoformat(), "to_date": future_date.isoformat()},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["hostel_labels"], [])
+        self.assertEqual(response.context["hostel_counts"], [])
+

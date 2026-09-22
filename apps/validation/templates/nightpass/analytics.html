@@ -2,7 +2,7 @@
 {% load static %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{% static 'validation/analytics.css' %}?v=20260923a">
+<link rel="stylesheet" href="{% static 'validation/analytics.css' %}?v=20260923b">
 {% endblock %}
 
 {% block content %}
@@ -122,6 +122,19 @@
 
     </div>
 
+    <!-- HOSTEL CHART -->
+    <div class="chart-grid chart-grid--hostel">
+
+        <div class="chart-card chart-card--wide">
+            <div class="chart-title">Night Passes by Hostel</div>
+            <div class="chart-subtitle">Selected date range &middot; Hostellers only (Hostel + Outside passes)</div>
+            <div class="chart-container chart-container--hostel" id="hostelChartContainer">
+                <canvas id="hostelChart"></canvas>
+            </div>
+        </div>
+
+    </div>
+
 </div>
 
 {{ daily_labels|json_script:"daily-labels" }}
@@ -134,6 +147,8 @@
 {{ pass_type_counts|json_script:"pass-type-counts" }}
 {{ outcome_labels|json_script:"outcome-labels" }}
 {{ outcome_counts|json_script:"outcome-counts" }}
+{{ hostel_labels|json_script:"hostel-labels" }}
+{{ hostel_counts|json_script:"hostel-counts" }}
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
@@ -339,6 +354,22 @@
     readJSON("outcome-labels", []),
     readJSON("outcome-counts", []),
     ["#16a34a", "#2563eb", "#d97706", "#64748b", "#dc2626", "#94a3b8"],
+  );
+
+  const hostelLabels = readJSON("hostel-labels", []);
+  const hostelCounts = readJSON("hostel-counts", []);
+  const hostelContainer = document.getElementById("hostelChartContainer");
+  if (hostelContainer && hostelLabels.length) {
+    // Grow the card to fit one row per hostel so labels stay readable.
+    const height = Math.max(280, hostelLabels.length * 40 + 40);
+    hostelContainer.style.height = `${height}px`;
+  }
+
+  horizontalBarChart(
+    "hostelChart",
+    hostelLabels,
+    hostelCounts,
+    "#2563eb",
   );
 })();
 </script>
